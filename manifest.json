@@ -2,7 +2,7 @@
 	"id": "wikipedia-connections-visualizer",
 	"name": "Wikipedia Connections Visualizer",
 	"version": "1.0.0",
-	"minAppVersion": "0.0.0",
+	"minAppVersion": "1.0.0",
 	"description": "View Wikipedia Connections in a visualized format.",
 	"author": "Vinícius de Souza",
 	"authorUrl": "https://github.com/souzadevinicius",
