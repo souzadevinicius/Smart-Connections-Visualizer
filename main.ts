@@ -1,6 +1,7 @@
 import { Plugin, ItemView, WorkspaceLeaf, debounce, Notice } from 'obsidian';
 import * as d3 from "d3";
 import _ from 'lodash';
+import { apiClient } from "./apiClient";
 
 const DEFAULT_NETWORK_SETTINGS : any = {
 	relevanceScoreThreshold: 0.5,
@@ -138,11 +139,11 @@ class ScGraphItemView extends ItemView {
     }
 
     getViewType(): string {
-        return "smart-connections-visualizer";
+        return "wikipedia-connections-visualizer";
     }
 
     getDisplayText(): string {
-        return "Smart connections visualizer";
+        return "Wikpedia connections visualizer";
     }
 
     getIcon(): string {
@@ -331,13 +332,13 @@ class ScGraphItemView extends ItemView {
 	
 
 	async onOpen() {
-		this.contentEl.createEl('h2', { text: 'Smart Visualizer' });
-		this.contentEl.createEl('p', { text: 'Waiting for Smart Connections to load...' });
+		this.contentEl.createEl('h2', { text: 'Wikipedia Visualizer' });
+		this.contentEl.createEl('p', { text: 'Waiting for Wikipedia Connections to load...' });
 		console.log(this.app);
-
+		console.log('aaa')
 		 // Introduce a small delay before rendering to give view time to load
-		 setTimeout(() => {
-			this.render();
+		 setTimeout(async () => {
+			await this.render();
 		}, 500); // Adjust the delay as needed
 
 	}
@@ -363,12 +364,12 @@ class ScGraphItemView extends ItemView {
 		if (currentNodeChange && !this.currentNoteChanging) {
 			this.currentNoteKey = currentNodeChange.path;
 			this.currentNoteChanging = true;
-			this.render();
+			await this.render();
 			return
 		}
 				
 		
-		this.updateVisualization();
+		await this.updateVisualization();
 	}
 
 	async waitForSmartNotes() {
@@ -384,8 +385,8 @@ class ScGraphItemView extends ItemView {
 		}
 	
 		// If we reach here, it means the entities are still not loaded
-		console.error('Smart notes did not load in time');
-		this.contentEl.createEl('p', { text: 'Failed to load Smart Connections.' });
+		console.error('Wikipedia connections did not load in time');
+		this.contentEl.createEl('p', { text: 'Failed to load Wikipedia Connections.' });
 	}
 
 	initializeVariables() {
@@ -970,12 +971,12 @@ class ScGraphItemView extends ItemView {
 		this.setupRefreshIcon();
 	}
 
-	setupScoreThresholdSlider() {
+	async setupScoreThresholdSlider() {
 		const scoreThresholdSlider = document.getElementById('smart-connections-visualizer-scoreThreshold') as HTMLInputElement;
 		if (scoreThresholdSlider) {
 			scoreThresholdSlider.addEventListener('input', (event) => this.updateScoreThreshold(event));
-			const debouncedUpdate = debounce((event: Event) => {
-				this.updateVisualization(parseFloat((event.target as HTMLInputElement).value));
+			const debouncedUpdate = debounce(async(event: Event) => {
+				await this.updateVisualization(parseFloat((event.target as HTMLInputElement).value));
 			}, 500, true);			
 			scoreThresholdSlider.addEventListener('input', debouncedUpdate);
 		}
@@ -1149,12 +1150,12 @@ class ScGraphItemView extends ItemView {
 		connectionTypeRadios.forEach(radio => radio.addEventListener('change', (event) => this.updateConnectionType(event)));
 	}
 
-	updateConnectionType(event: any) {
+	async updateConnectionType(event: any) {
 		this.connectionType = event.target.value;
 		this.isChangingConnectionType = true;
 		this.plugin.settings.connectionType = this.connectionType; // Update the settings
         this.plugin.saveSettings(); // Save the settings
-		this.updateVisualization();
+		await this.updateVisualization();
 	}
 
 	setupMaxLabelCharactersSlider() {
@@ -1219,7 +1220,7 @@ class ScGraphItemView extends ItemView {
 		if (refreshIcon) refreshIcon.addEventListener('click', () => this.resetToDefault());
 	}
 
-	resetToDefault() {
+	async resetToDefault() {
 
 		// Reset all values to their default
 		this.relevanceScoreThreshold = DEFAULT_NETWORK_SETTINGS.relevanceScoreThreshold;
@@ -1264,7 +1265,7 @@ class ScGraphItemView extends ItemView {
 		this.updateNodeSizes();
 		this.updateLinkThickness();
 		this.updateSimulationForces();
-		this.updateVisualization(this.relevanceScoreThreshold);
+		await this.updateVisualization(this.relevanceScoreThreshold);
 		
 	}
 
@@ -1321,17 +1322,17 @@ class ScGraphItemView extends ItemView {
 		nodeLabelSizeSlider.value = `${this.nodeLabelSize}`;
 	}
 
-	watchForNoteChanges() {
-		this.app.workspace.on('file-open', (file) => {
-			if (file && (this.currentNoteKey !== file.path) && !this.isHovering && this.containerEl.children[1].checkVisibility()) {
+	async watchForNoteChanges() {
+		this.app.workspace.on('file-open', async(file) => {
+			if (file && (this.currentNoteKey !== file.path) && !this.isHovering && this?.containerEl?.children[1]) {
 				this.currentNoteKey = file.path;
 				this.currentNoteChanging = true;
-				this.render();
+				await this.render();
 			}
 		});
 	}
 
-	updateVisualization(newScoreThreshold?: number) {
+	async updateVisualization(newScoreThreshold?: number) {
 
 		// Only update if we're not already updating
 		if (this.updatingVisualization && !this.isChangingConnectionType) {
@@ -1346,7 +1347,7 @@ class ScGraphItemView extends ItemView {
 			this.relevanceScoreThreshold = newScoreThreshold;
 		}
 	
-		this.updateConnections();
+		await this.updateConnections();
 
 		const filteredConnections = this.connections.filter((connection: any) => connection.score >= this.relevanceScoreThreshold);
 		const visibleNodes = new Set<string>();
@@ -1451,7 +1452,7 @@ class ScGraphItemView extends ItemView {
 	
 	
 	
-	updateConnections() {
+	async updateConnections() {
 		this.nodes = [];
 		this.links = [];
 		this.connections = [];
@@ -1459,12 +1460,10 @@ class ScGraphItemView extends ItemView {
 		this.maxScore = 0;
 		if (!this.currentNoteKey) return;
 		this.centralNote = this.smartNotes[this.currentNoteKey];
-		console.log('central note: ', this.centralNote);
-
-		// console.log('central note connections: ', parse(stringify(this.centralNote.find_connections())));
-
-		const noteConnections = this.centralNote.find_connections().filter(
-			(connection: any) => connection.score >= this.relevanceScoreThreshold);
+		const noteConnections = (await apiClient.getResponse(this.currentNoteKey.replace(".md", ""))).map(l => ({
+			item: {title:l?.titles?.normalized, key:l?.titles?.normalized, id:l?.titles?.normalized},
+			score: 1
+		}))
 		this.addCentralNode();
 		this.addFilteredConnections(noteConnections);
 		const isValid = this.validateGraphData(this.nodes, this.links);
@@ -1499,15 +1498,7 @@ class ScGraphItemView extends ItemView {
 	
 	addFilteredConnections(noteConnections: any) {
 
-		const filteredConnections = noteConnections.filter((connection: any) => {
-			if (this.connectionType === 'both') {
-				return true; // return all connections
-			} else {
-				// If connectionType is block, return true if connection is a SmartBlock, otherwise return false
-				return (this.connectionType === 'block') === (connection.item instanceof this.env.item_types.SmartBlock);
-
-			}
-		});		// console.log('Filtered connections:', filteredConnections);
+		const filteredConnections = noteConnections;
 		filteredConnections.forEach((connection: any, index: any) => {
 			// console.log('Filtered connection:', connection, 'Index:', index);
 			if (connection && connection.item && connection.item.key) {
@@ -2055,18 +2046,18 @@ export default class ScGraphView extends Plugin {
 		await this.loadSettings();
 
 		// Register the new view
-        this.registerView("smart-connections-visualizer", (leaf: WorkspaceLeaf) => new ScGraphItemView(leaf, this));
+        this.registerView("wikipedia-connections-visualizer", (leaf: WorkspaceLeaf) => new ScGraphItemView(leaf, this));
 
 		// Register hover link source
-		this.registerHoverLinkSource('smart-connections-visualizer', {
-			display: 'Smart connections visualizer hover link source',
+		this.registerHoverLinkSource('wikipedia-connections-visualizer', {
+			display: 'Wikipedia connections visualizer hover link source',
 			defaultMod: true
 		});
 
         // This creates an icon in the left ribbon.
-        this.addRibbonIcon('git-fork', 'Open smart connections visualizer', (evt: MouseEvent) => {
+        this.addRibbonIcon('git-fork', 'Open wikipedia connections visualizer', (evt: MouseEvent) => {
            	// Check if the view is already open
-			const existingLeaf = this.app.workspace.getLeavesOfType("smart-connections-visualizer")[0];
+			const existingLeaf = this.app.workspace.getLeavesOfType("wikipedia-connections-visualizer")[0];
 			if (existingLeaf) {
 				// If it exists, focus on it
 				this.app.workspace.setActiveLeaf(existingLeaf);
@@ -2075,7 +2066,7 @@ export default class ScGraphView extends Plugin {
 				let leaf = this.app.workspace.getLeaf(true);
 				// Set the new leaf's view to your custom view
 				leaf.setViewState({
-					type: "smart-connections-visualizer",
+					type: "wikipedia-connections-visualizer",
 					active: true,
 				});
 			}

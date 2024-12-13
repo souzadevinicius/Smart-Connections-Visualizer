@@ -1,12 +1,11 @@
 {
-	"id": "smart-connections-visualizer",
-	"name": "Smart Connections Visualizer",
-	"version": "1.0.19",
-	"minAppVersion": "0.15.0",
-	"description": "View your Smart Connections in a visualized format.",
-	"author": "Evan Moscoso",
-	"authorUrl": "https://github.com/mossy1022",
-	"fundingUrl": "https://buymeacoffee.com/evansoasis",
+	"id": "wikipedia-connections-visualizer",
+	"name": "Wikipedia Connections Visualizer",
+	"version": "1.0.0",
+	"minAppVersion": "0.0.0",
+	"description": "View Wikipedia Connections in a visualized format.",
+	"author": "Vinícius de Souza",
+	"authorUrl": "https://github.com/souzadevinicius",
 	"isDesktopOnly": true
 }
 
