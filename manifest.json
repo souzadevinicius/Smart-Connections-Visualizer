@@ -6,6 +6,6 @@
 	"description": "View Wikipedia Connections in a visualized format.",
 	"author": "Vinícius de Souza",
 	"authorUrl": "https://github.com/souzadevinicius",
-	"isDesktopOnly": true
+	"isDesktopOnly": false
 }
 
