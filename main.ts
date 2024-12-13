@@ -2,14 +2,16 @@ import { Plugin, ItemView, WorkspaceLeaf, debounce, Notice } from 'obsidian';
 import * as d3 from "d3";
 import _ from 'lodash';
 import { apiClient } from "./apiClient";
+import open from 'open';
+import {SearchView} from './view';
 
 const DEFAULT_NETWORK_SETTINGS : any = {
 	relevanceScoreThreshold: 0.5,
 	nodeSize: 4,
 	linkThickness: 0.3,
-	repelForce: 400,
+	repelForce: 180,
 	linkForce: 0.4,
-	linkDistance: 70,
+	linkDistance: 15,
 	centerForce: 0.1,
 	textFadeThreshold: 1.1,
 	minLinkThickness: 0.3,
@@ -69,10 +71,11 @@ class ScGraphItemView extends ItemView {
     isHovering: boolean; 
 	relevanceScoreThreshold = 0.5;
 	nodeSize = 4;
+	url: string;
 	linkThickness = 0.3;
-	repelForce = 400;
+	repelForce = 180;
 	linkForce = 0.4;
-	linkDistance = 70;
+	linkDistance = 15;
 	centerForce = 0.3;
 	textFadeThreshold = 1.1;
 	minScore = 1;
@@ -333,9 +336,8 @@ class ScGraphItemView extends ItemView {
 
 	async onOpen() {
 		this.contentEl.createEl('h2', { text: 'Wikipedia Visualizer' });
-		this.contentEl.createEl('p', { text: 'Waiting for Wikipedia Connections to load...' });
+		this.contentEl.createEl('p', { text: 'Waiting for Wikipedia Connections to load!...' });
 		console.log(this.app);
-		console.log('aaa')
 		 // Introduce a small delay before rendering to give view time to load
 		 setTimeout(async () => {
 			await this.render();
@@ -345,15 +347,9 @@ class ScGraphItemView extends ItemView {
 
 	async render() {
 		// wait until this.smartNotes is available
-		while (!this.env?.entities_loaded) {
-			await new Promise(resolve => setTimeout(resolve, 2000));
-		}
 
 		this.contentEl.empty();
 		this.initializeVariables();
-		if (Object.keys(this.smartNotes).length === 0) {
-			return;
-		}
 		this.setupSettingsMenu();
 		this.setupSVG();
 		this.addEventListeners();		
@@ -372,22 +368,6 @@ class ScGraphItemView extends ItemView {
 		await this.updateVisualization();
 	}
 
-	async waitForSmartNotes() {
-		const maxRetries = 10; // Set a max number of retries to avoid infinite loop
-		const delay = 2000; // Delay in milliseconds between retries
-	
-		for (let attempt = 0; attempt < maxRetries; attempt++) {
-			console.log(this.env);
-			if (this.env?.entities_loaded) {
-				return;
-			}
-			await new Promise(resolve => setTimeout(resolve, delay));
-		}
-	
-		// If we reach here, it means the entities are still not loaded
-		console.error('Wikipedia connections did not load in time');
-		this.contentEl.createEl('p', { text: 'Failed to load Wikipedia Connections.' });
-	}
 
 	initializeVariables() {
 		this.minScore = 1;
@@ -410,7 +390,8 @@ class ScGraphItemView extends ItemView {
 					svgGroup.attr('transform', event.transform);
 					this.updateLabelOpacity(event.transform.k);
 				}));
-				
+		// svg.call(d3.zoom().transform, d3.zoomIdentity.scale(200));
+
 		const svgGroup = svg.append('g');
 	
 		svgGroup.append('g').attr('class', 'smart-connections-visualizer-links');
@@ -1459,10 +1440,21 @@ class ScGraphItemView extends ItemView {
 		this.minScore = 1;
 		this.maxScore = 0;
 		if (!this.currentNoteKey) return;
-		this.centralNote = this.smartNotes[this.currentNoteKey];
-		const noteConnections = (await apiClient.getResponse(this.currentNoteKey.replace(".md", ""))).map(l => ({
-			item: {title:l?.titles?.normalized, key:l?.titles?.normalized, id:l?.titles?.normalized},
-			score: 1
+		const nodeTitle = this?.currentNoteKey?.split('/')?.pop()?.replace(".md", "") || '';
+		this.centralNote = {
+			url:'https://ge.globo',
+			title:nodeTitle,
+			key:nodeTitle,
+			id:nodeTitle
+		};
+		const noteConnections = (await apiClient.getResponse(nodeTitle)).map(l => ({
+			item: {
+				url:l?.content_urls?.desktop?.page,
+				title:l?.normalizedtitle,
+				key:l?.normalizedtitle,
+				id:l?.normalizedtitle
+			},
+			score: 1,
 		}))
 		this.addCentralNode();
 		this.addFilteredConnections(noteConnections);
@@ -1481,6 +1473,7 @@ class ScGraphItemView extends ItemView {
 			this.nodes.push({
 				id: this.centralNote.key,
 				name: this.centralNote.key,
+				url: this.url,
 				group: 'note',
 				x: width / 2,
 				y: height / 2,
@@ -1522,12 +1515,13 @@ class ScGraphItemView extends ItemView {
 			this.nodes.push({
 				id: connectionId,
 				name: connectionId,
-				group: (connection.item instanceof this.env.item_types.SmartBlock) ? 'block' : 'note',
+				url: connection?.item?.url,
+				group: 'node',// (connection.item instanceof this.env?.item_types?.SmartBlock) ? 'block' : 'note',
 				x: Math.random() * 1000,
 				y: Math.random() * 1000,
 				fx: null,
 				fy: null,
-				fill: (connection.item instanceof this.env.item_types.SmartBlock) ? this.blockFillColor : this.noteFillColor,
+				fill: this.noteFillColor, //(connection.item instanceof this.env?.item_types?.SmartBlock) ? this.blockFillColor : this.noteFillColor,
 				selected: false,
 				highlighted: false
 			});
@@ -1535,7 +1529,7 @@ class ScGraphItemView extends ItemView {
 			console.log('Node already exists for connection ID:',connectionId);
 		}
 	}
-	
+
 	addConnectionLink(connectionId: string, connection: any) {
 		const sourceNode = this.nodes.find((node: { id: string; }) => node.id === this.centralNote.key);
 		const targetNode = this.nodes.find((node: { id: string; }) => node.id === connectionId);
@@ -1702,15 +1696,33 @@ class ScGraphItemView extends ItemView {
 
 
 	}
+
 	
-	onNodeClick(event: any, d: any) {
+    async openSearch(url: string, query: string, activeView: SearchView) {
+		let encodedQuery = query;
+		  if (activeView) {
+			activeView.frame.setAttr('src', url);
+			activeView.url = url;
+		  } else {
+			const leaf = this.app.workspace.getLeaf(!(this.app.workspace.activeLeaf.view.getViewType() === 'empty'));
+			// const leaf = this.app.workspace.splitActiveLeaf(this.settings.splitDirection);
+			const view = new SearchView(this, leaf, query, url, url);
+			await leaf.open(view);
+		  }
+	  }
+	
+	async onNodeClick(event: any, d: any) {
 
 		// Don't need to touch central since we're in it
-		if(d.id === this.centralNode.id) return;
+				// }
+		console.log(d.url, 'aquiiiiiiiiii',  new Date())
+		await this.openSearch(d?.url);
+		//original start
+		// if(d.id === this.centralNode.id) return;
 
-		this.env.plugin.open_note(d.id, event)
-
-		// event.stopPropagation();
+		// this.env.plugin.open_note(d.id, event)
+		//original end
+		event.stopPropagation();
 		// TODO:: Bring back when ready for selection
 
 		// if (!this.isAltPressed) this.clearSelections();

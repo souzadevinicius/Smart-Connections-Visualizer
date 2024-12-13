@@ -20,7 +20,7 @@ const copy_to_plugins = {
 	name: 'copy_to_plugins',
 	setup(build) {
 		build.onEnd(() => {
-			const plugin_path =  "/home/vinicius/workspace/vault/.obsidian/plugins/Smart-Connections-Visualizer" //path.join(process.env.OBSIDIAN_PLUGINS_PATH, "wikipedia-connections-visualizer");
+			const plugin_path = path.join(process.env.OBSIDIAN_PLUGINS_PATH, "wikipedia-connections-visualizer");
 			
 			if (!fs.existsSync(plugin_path)) {
 				fs.mkdirSync(plugin_path);
