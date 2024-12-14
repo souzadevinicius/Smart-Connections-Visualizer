@@ -2,7 +2,6 @@ import { Plugin, ItemView, WorkspaceLeaf, debounce, Notice } from 'obsidian';
 import * as d3 from "d3";
 import _ from 'lodash';
 import { apiClient } from "./apiClient";
-import open from 'open';
 import {SearchView} from './view';
 
 const DEFAULT_NETWORK_SETTINGS : any = {
@@ -377,34 +376,33 @@ class ScGraphItemView extends ItemView {
 	setupSVG() {
 		const width = this.contentEl.clientWidth;
 		const height = this.contentEl.clientHeight;
-	
+		
 		const svg = d3.select(this.contentEl)
-			.append('svg')
-			.attr('width', '100%')
-			.attr('height', '98%')
-			.attr('viewBox', `0 0 ${width} ${height}`)
-			.attr('preserveAspectRatio', 'xMidYMid meet')
-			.call(d3.zoom()
-				.scaleExtent([0.1, 10])
-				.on('zoom', (event) => {
-					svgGroup.attr('transform', event.transform);
-					this.updateLabelOpacity(event.transform.k);
-				}));
-		// svg.call(d3.zoom().transform, d3.zoomIdentity.scale(200));
-
-		const svgGroup = svg.append('g');
+		.append('svg')
+		.attr('width', '100%')
+		.attr('height', '98%')
+		.attr('viewBox', `${width/3} ${height/3} ${width/3} ${height/3}`)
+		.attr('preserveAspectRatio', 'xMidYMid meet')
+		.call(d3.zoom()
+			.scaleExtent([0.1, 10])
+			.on('zoom', (event) => {
+				svgGroup.attr('transform', event.transform);
+				this.updateLabelOpacity(event.transform.k);
+			}));
 	
+		const svgGroup = svg.append('g');
+		
 		svgGroup.append('g').attr('class', 'smart-connections-visualizer-links');
 		svgGroup.append('g').attr('class', 'smart-connections-visualizer-node-labels');
 		svgGroup.append('g').attr('class', 'smart-connections-visualizer-link-labels');
 		svgGroup.append('g').attr('class', 'smart-connections-visualizer-nodes');
-	
 		this.svgGroup = svgGroup;
 		this.svg = svg;
 	}
 	
 
 	getSVGDimensions() {
+
 		const width = this.contentEl.clientWidth || this.contentEl.getBoundingClientRect().width;
 		const height = this.contentEl.clientHeight || this.contentEl.getBoundingClientRect().height;
 		return { width, height };
@@ -418,7 +416,7 @@ class ScGraphItemView extends ItemView {
 			.attr('height', '98%')
 			.attr('viewBox', `0 0 ${width} ${height}`)
 			.attr('preserveAspectRatio', 'xMidYMid meet')
-			.style('background', '#2d3039')
+			.style('background', '#FF0000')
 			.call(d3.zoom().scaleExtent([0.1, 10]).on('zoom', this.onZoom.bind(this)));
 	}
 
