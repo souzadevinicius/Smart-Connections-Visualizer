@@ -381,7 +381,7 @@ class ScGraphItemView extends ItemView {
 		.append('svg')
 		.attr('width', '100%')
 		.attr('height', '98%')
-		.attr('viewBox', `${width/3} ${height/3} ${width/3} ${height/3}`)
+		.attr('viewBox', `${width/4} ${height/4} ${width/2} ${height/2}`)
 		.attr('preserveAspectRatio', 'xMidYMid meet')
 		.call(d3.zoom()
 			.scaleExtent([0.1, 10])
@@ -1335,7 +1335,7 @@ class ScGraphItemView extends ItemView {
 			visibleNodes.add(connection.target);
 		});
 		// Always include the central node
-		visibleNodes.add(this.centralNote.key);
+		visibleNodes.add(this.centralNote?.key);
 		const nodesData = Array.from(visibleNodes).map((id: any) => {
 			const node = this.nodes.find((node: any) => node.id === id);
 			return node ? node : null;
@@ -1445,7 +1445,11 @@ class ScGraphItemView extends ItemView {
 			key:nodeTitle,
 			id:nodeTitle
 		};
-		const noteConnections = (await apiClient.getResponse(nodeTitle)).map(l => ({
+		const res = await apiClient.getResponse(nodeTitle).then(content => content).catch(e => console.info(e));
+		if (!res){
+			return;
+		}
+		const noteConnections = res.map(l => ({
 			item: {
 				url:l?.content_urls?.desktop?.page,
 				title:l?.normalizedtitle,
@@ -2050,41 +2054,36 @@ class ScGraphItemView extends ItemView {
 export default class ScGraphView extends Plugin {
 
 	settings: PluginSettings;
-
-    async onload() {
-
+	async onload() {
 		await this.loadSettings();
-
+	
 		// Register the new view
-        this.registerView("wikipedia-connections-visualizer", (leaf: WorkspaceLeaf) => new ScGraphItemView(leaf, this));
-
+		this.registerView("wikipedia-connections-visualizer", (leaf: WorkspaceLeaf) => new ScGraphItemView(leaf, this));
+	
 		// Register hover link source
 		this.registerHoverLinkSource('wikipedia-connections-visualizer', {
 			display: 'Wikipedia connections visualizer hover link source',
 			defaultMod: true
 		});
-
-        // This creates an icon in the left ribbon.
-        this.addRibbonIcon('git-fork', 'Open wikipedia connections visualizer', (evt: MouseEvent) => {
-           	// Check if the view is already open
+	
+		// This creates an icon in the left ribbon.
+		this.addRibbonIcon('git-fork', 'Open Wikipedia Connections Visualizer', (evt: MouseEvent) => {
+			// Check if the view is already open in the right sidebar
 			const existingLeaf = this.app.workspace.getLeavesOfType("wikipedia-connections-visualizer")[0];
+	
 			if (existingLeaf) {
-				// If it exists, focus on it
+			// 	// If it exists, focus on it
 				this.app.workspace.setActiveLeaf(existingLeaf);
 			} else {
-				// Create a new leaf in the current workspace
-				let leaf = this.app.workspace.getLeaf(true);
-				// Set the new leaf's view to your custom view
-				leaf.setViewState({
+				// Create a new leaf in the right sidebar
+				this.app.workspace.getRightLeaf(false).setViewState({
 					type: "wikipedia-connections-visualizer",
 					active: true,
 				});
 			}
-        })
-		
-
-    }
-
+		});
+	}
+	
 	async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_NETWORK_SETTINGS, await this.loadData());
     }
