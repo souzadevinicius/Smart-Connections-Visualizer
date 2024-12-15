@@ -1,10 +1,13 @@
-import { Plugin, ItemView, WorkspaceLeaf, debounce, Notice } from 'obsidian';
+import { Setting, Plugin, ItemView, WorkspaceLeaf, debounce, Notice } from 'obsidian';
 import * as d3 from "d3";
 import _ from 'lodash';
 import { apiClient } from "./apiClient";
 import {SearchView} from './view';
 
+
+
 const DEFAULT_NETWORK_SETTINGS : any = {
+	language: 'pt',
 	relevanceScoreThreshold: 0.5,
 	nodeSize: 4,
 	linkThickness: 0.3,
@@ -35,6 +38,7 @@ const DEFAULT_NETWORK_SETTINGS : any = {
 */
 
 interface PluginSettings {
+	language: string,
     relevanceScoreThreshold: number;
     nodeSize: number;
     linkThickness: number;
@@ -113,6 +117,7 @@ class ScGraphItemView extends ItemView {
 	currentNoteChanging = false;
 	isFiltering = false;	
 	settingsMade = false;
+	language = 'pt';
 
     constructor(leaf: WorkspaceLeaf, plugin: ScGraphView) {
         super(leaf);
@@ -137,6 +142,7 @@ class ScGraphItemView extends ItemView {
         this.connectionType = this.plugin.settings.connectionType;
 		this.noteFillColor = this.plugin.settings.noteFillColor;
 		this.blockFillColor = this.plugin.settings.blockFillColor;
+		this.language = this.plugin.settings.language;
 
     }
 
@@ -693,62 +699,26 @@ class ScGraphItemView extends ItemView {
 	
 	getFiltersContent(parent: HTMLElement) {
 		const sliderContainer1 = parent.createEl('div', { cls: 'smart-connections-visualizer-slider-container' });
-		sliderContainer1.createEl('label', { 
-			text: `Min relevance: ${(this.relevanceScoreThreshold * 100).toFixed(0)}%`, 
-			attr: { id: 'smart-connections-visualizer-scoreThresholdLabel', for: 'smart-connections-visualizer-scoreThreshold' } 
-		});
 
-		const relevanceSlider = sliderContainer1.createEl('input', { 
-			attr: { 
-				type: 'range', 
-				id: 'smart-connections-visualizer-scoreThreshold', 
-				class: 'smart-connections-visualizer-slider', 
-				name: 'scoreThreshold', 
-				min: '0', 
-				max: '0.99', 
-				step: '0.01' 
-			} 
-		});
+        sliderContainer1.createEl('h2', { text: 'Language Settings' });
+        new Setting(sliderContainer1)
+            .setName('Select Language')
+            .setDesc('Choose your preferred language')
+            .addDropdown(dropDown => {
+                dropDown.addOption('pt', 'Portuguese'); // Option for Portuguese
+                dropDown.addOption('en', 'English');     // Option for English
+                dropDown.setValue(this.plugin.settings.language); // Set the current value
 
-		// Ensure the slider's value is set after it is appended to the DOM
-		relevanceSlider.value = this.relevanceScoreThreshold.toString();
+                dropDown.onChange(async (value) => {
+                    this.plugin.settings.language = value; // Update the setting with selected value
+                    apiClient.setLang(value);
+					this.updateVisualization();
+					await this.plugin.saveSettings(); // Save the updated settings
+                });
+            });
+
 	
-		parent.createEl('label', { text: 'Connection type:', cls: 'smart-connections-visualizer-settings-item-content-label' });
 	
-		const radioContainer = parent.createEl('div', { cls: 'smart-connections-visualizer-radio-container' });
-
-		const radioBlockLabel = radioContainer.createEl('label');
-		const blockRadio = radioBlockLabel.createEl('input', { 
-			attr: { 
-				type: 'radio', 
-				name: 'connectionType', 
-				value: 'block' 
-			} 
-		});
-		blockRadio.checked = (this.connectionType === 'block'); // Set checked based on connectionType
-		radioBlockLabel.appendText(' Block');
-	
-		const radioNoteLabel = radioContainer.createEl('label');
-		const noteRadio = radioNoteLabel.createEl('input', { 
-			attr: { 
-				type: 'radio', 
-				name: 'connectionType', 
-				value: 'note' 
-			} 
-		});
-		noteRadio.checked = (this.connectionType === 'note'); // Set checked based on connectionType
-		radioNoteLabel.appendText(' Note');
-
-		const radioBothLabel = radioContainer.createEl('label');
-		const bothRadio = radioBothLabel.createEl('input', { 
-			attr: { 
-				type: 'radio', 
-				name: 'connectionType', 
-				value: 'both' 
-			} 
-		});
-		bothRadio.checked = (this.connectionType === 'both'); // Set checked based on connectionType
-		radioBothLabel.appendText(' Both');
 	}
 	
 
@@ -961,14 +931,6 @@ class ScGraphItemView extends ItemView {
 		}
 	}
 
-	updateScoreThreshold(event: any) {
-		const newScoreThreshold = parseFloat(event.target.value);
-		const label = document.getElementById('smart-connections-visualizer-scoreThresholdLabel');
-		this.plugin.settings.relevanceScoreThreshold = newScoreThreshold; // Update the settings
-        this.plugin.saveSettings(); // Save the settings
-		if (label) label.textContent = `Min relevance: ${(newScoreThreshold * 100).toFixed(0)}%`;
-	}
-
 	setupNodeSizeSlider() {
 		const nodeSizeSlider = document.getElementById('smart-connections-visualizer-nodeSize') as HTMLInputElement;
 		if (nodeSizeSlider) {
@@ -1175,7 +1137,6 @@ class ScGraphItemView extends ItemView {
 	}
 
 	updateNodeLabelSize(event: any) {
-		console.log('flounddd');
 		const newNodeLabelSize = parseFloat(event.target.value);
 		const label = document.getElementById('smart-connections-visualizer-nodeLabelSizeLabel');
 		if (label) label.textContent = `Node Label Size: ${newNodeLabelSize}`;
@@ -1250,7 +1211,6 @@ class ScGraphItemView extends ItemView {
 
 	updateLabelsToDefaults() {
 		const labels = {
-			'smart-connections-visualizer-scoreThresholdLabel': `Min relevance: ${(this.relevanceScoreThreshold * 100).toFixed(0)}%`,
 			'smart-connections-visualizer-nodeSizeLabel': `Node size: ${this.nodeSize}`,
 			'smart-connections-visualizer-maxLabelCharactersLabel': `Max label characters: ${this.maxLabelCharacters}`,
 			'smart-connections-visualizer-linkLabelSizeLabel': `Link label size: ${this.linkLabelSize}`,
@@ -1311,7 +1271,7 @@ class ScGraphItemView extends ItemView {
 		});
 	}
 
-	async updateVisualization(newScoreThreshold?: number) {
+	async updateVisualization(newScoreThreshold?: number, nodeName?: string) {
 
 		// Only update if we're not already updating
 		if (this.updatingVisualization && !this.isChangingConnectionType) {
@@ -1326,7 +1286,7 @@ class ScGraphItemView extends ItemView {
 			this.relevanceScoreThreshold = newScoreThreshold;
 		}
 	
-		await this.updateConnections();
+		await this.updateConnections(nodeName);
 
 		const filteredConnections = this.connections.filter((connection: any) => connection.score >= this.relevanceScoreThreshold);
 		const visibleNodes = new Set<string>();
@@ -1431,16 +1391,16 @@ class ScGraphItemView extends ItemView {
 	
 	
 	
-	async updateConnections() {
+	async updateConnections(nodeName: string = '') {
 		this.nodes = [];
 		this.links = [];
 		this.connections = [];
 		this.minScore = 1;
 		this.maxScore = 0;
 		if (!this.currentNoteKey) return;
-		const nodeTitle = this?.currentNoteKey?.split('/')?.pop()?.replace(".md", "") || '';
+		const nodeTitle = nodeName != '' ? nodeName : this?.currentNoteKey?.split('/')?.pop()?.replace(".md", "") || '';
 		this.centralNote = {
-			url:'https://ge.globo',
+			url:'',
 			title:nodeTitle,
 			key:nodeTitle,
 			id:nodeTitle
@@ -1700,15 +1660,14 @@ class ScGraphItemView extends ItemView {
 	}
 
 	
-    async openSearch(url: string, query: string, activeView: SearchView) {
-		let encodedQuery = query;
+    async openSearch(url: string, activeView: any = null) {
 		  if (activeView) {
 			activeView.frame.setAttr('src', url);
 			activeView.url = url;
 		  } else {
 			const leaf = this.app.workspace.getLeaf(!(this.app.workspace.activeLeaf.view.getViewType() === 'empty'));
 			// const leaf = this.app.workspace.splitActiveLeaf(this.settings.splitDirection);
-			const view = new SearchView(this, leaf, query, url, url);
+			const view = new SearchView(this, leaf, null, url, url);
 			await leaf.open(view);
 		  }
 	  }
@@ -1717,8 +1676,9 @@ class ScGraphItemView extends ItemView {
 
 		// Don't need to touch central since we're in it
 				// }
-		console.log(d.url, 'aquiiiiiiiiii',  new Date())
+		await this.updateVisualization(1, d?.name);
 		await this.openSearch(d?.url);
+
 		//original start
 		// if(d.id === this.centralNode.id) return;
 
