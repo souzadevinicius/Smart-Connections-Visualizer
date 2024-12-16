@@ -705,8 +705,8 @@ class ScGraphItemView extends ItemView {
             .setName('Select Language')
             .setDesc('Choose your preferred language')
             .addDropdown(dropDown => {
-                dropDown.addOption('pt', 'Portuguese'); // Option for Portuguese
                 dropDown.addOption('en', 'English');     // Option for English
+                dropDown.addOption('pt', 'Portuguese'); // Option for Portuguese
                 dropDown.setValue(this.plugin.settings.language); // Set the current value
 
                 dropDown.onChange(async (value) => {
@@ -902,7 +902,6 @@ class ScGraphItemView extends ItemView {
 	}
 
 	setupSettingsEventListeners() {
-		this.setupScoreThresholdSlider();
 		this.setupNodeSizeSlider();
 		this.setupLineThicknessSlider();
 		this.setupCenterForceSlider();
@@ -918,17 +917,6 @@ class ScGraphItemView extends ItemView {
 		this.setupNodeLabelSizeSlider();
 		this.setupCloseIcon();
 		this.setupRefreshIcon();
-	}
-
-	async setupScoreThresholdSlider() {
-		const scoreThresholdSlider = document.getElementById('smart-connections-visualizer-scoreThreshold') as HTMLInputElement;
-		if (scoreThresholdSlider) {
-			scoreThresholdSlider.addEventListener('input', (event) => this.updateScoreThreshold(event));
-			const debouncedUpdate = debounce(async(event: Event) => {
-				await this.updateVisualization(parseFloat((event.target as HTMLInputElement).value));
-			}, 500, true);			
-			scoreThresholdSlider.addEventListener('input', debouncedUpdate);
-		}
 	}
 
 	setupNodeSizeSlider() {
@@ -1037,20 +1025,11 @@ class ScGraphItemView extends ItemView {
 		const fadeThresholdSlider = document.getElementById('smart-connections-visualizer-fadeThreshold') as HTMLInputElement;
 		if (fadeThresholdSlider) {
 			fadeThresholdSlider.addEventListener('input', (event) => {
-				this.updateFadeThreshold(event);
 				this.updateLabelOpacity(d3.zoomTransform(d3.select('svg').node() as Element).k);
 			});
 		}
 	}
 
-	updateFadeThreshold(event: any) {
-		const newFadeThreshold = parseFloat(event.target.value);
-		const label = document.getElementById('smart-connections-visualizer-fadeThresholdLabel');
-		if (label) label.textContent = `Text fade threshold: ${newFadeThreshold}`;
-		this.textFadeThreshold = newFadeThreshold;
-		this.plugin.settings.textFadeThreshold = newFadeThreshold; // Update the settings
-        this.plugin.saveSettings(); // Save the settings
-	}
 
 	setupMinLinkThicknessSlider() {
 		const minLinkThicknessSlider = document.getElementById('smart-connections-visualizer-minLinkThickness') as HTMLInputElement;
@@ -1400,7 +1379,7 @@ class ScGraphItemView extends ItemView {
 		if (!this.currentNoteKey) return;
 		const nodeTitle = nodeName != '' ? nodeName : this?.currentNoteKey?.split('/')?.pop()?.replace(".md", "") || '';
 		this.centralNote = {
-			url:'',
+			url:`https://${this.plugin.settings.language}.wikipedia.org/wiki/${nodeTitle}`,
 			title:nodeTitle,
 			key:nodeTitle,
 			id:nodeTitle
@@ -1435,7 +1414,7 @@ class ScGraphItemView extends ItemView {
 			this.nodes.push({
 				id: this.centralNote.key,
 				name: this.centralNote.key,
-				url: this.url,
+				url: `https://${this.plugin.settings.language}.wikipedia.org/wiki/${encodeURI(this.centralNote.key)}`,
 				group: 'note',
 				x: width / 2,
 				y: height / 2,
@@ -1659,25 +1638,47 @@ class ScGraphItemView extends ItemView {
 
 	}
 
+	async openSearch(node: any) {
+		const newTitle = `Search: ${node?.name}`; // Define the new title based on the URL
+		// Get the current active leaf
+		const leaf = this.app.workspace.activeLeaf;
+
+		if (leaf && leaf.view instanceof SearchView) {
+			// If there's an existing SearchView, update its URL and set its state
+			leaf.view.frame.setAttr('src', node?.url);
+			leaf.view.url = node?.url;
+
+			// Update display text using setViewState
+			this.app.workspace?.activeLeaf?.setViewState({
+				type: leaf.view.getViewType(),
+				active: true,
+				state: { viewTitle: newTitle } // Pass the new title in state
+			});
+			this.app.workspace.setActiveLeaf(leaf); // Ensure it's the active leaf
+		} else {
+			// If no active SearchView, create a new one
+			const newLeaf = this.app.workspace.getLeaf(true); // true ensures it's a new leaf
+			const view = new SearchView(this, newLeaf, node?.url, node?.name);
+			await newLeaf.open(view);
+
+			// Set initial display text via setViewState for the newly created view
+			await newLeaf.setViewState({
+				type: view.getViewType(),
+				active: true,
+				state: { viewTitle: newTitle } // Set initial title for the new view
+			});
+			this.app.workspace.setActiveLeaf(newLeaf); // Set this leaf as active
+		}
+	}
 	
-    async openSearch(url: string, activeView: any = null) {
-		  if (activeView) {
-			activeView.frame.setAttr('src', url);
-			activeView.url = url;
-		  } else {
-			const leaf = this.app.workspace.getLeaf(!(this.app.workspace.activeLeaf.view.getViewType() === 'empty'));
-			// const leaf = this.app.workspace.splitActiveLeaf(this.settings.splitDirection);
-			const view = new SearchView(this, leaf, null, url, url);
-			await leaf.open(view);
-		  }
-	  }
 	
+
 	async onNodeClick(event: any, d: any) {
 
 		// Don't need to touch central since we're in it
 				// }
 		await this.updateVisualization(1, d?.name);
-		await this.openSearch(d?.url);
+		await this.openSearch(d);
 
 		//original start
 		// if(d.id === this.centralNode.id) return;
@@ -2036,7 +2037,7 @@ export default class ScGraphView extends Plugin {
 				this.app.workspace.setActiveLeaf(existingLeaf);
 			} else {
 				// Create a new leaf in the right sidebar
-				this.app.workspace.getRightLeaf(false).setViewState({
+				this.app.workspace.getRightLeaf(false)?.setViewState({
 					type: "wikipedia-connections-visualizer",
 					active: true,
 				});

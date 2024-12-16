@@ -2,19 +2,17 @@ import {ItemView, WorkspaceLeaf} from 'obsidian';
 import SearchOnInternetPlugin from './main';
 
 export class SearchView extends ItemView {
-    query: string;
-    site: string;
     url: string;
+    title: string;
     plugin: SearchOnInternetPlugin;
 
     frame: HTMLElement;
 
-    constructor(plugin: SearchOnInternetPlugin, leaf: WorkspaceLeaf, query: string, site: string, url: string) {
+    constructor(plugin: SearchOnInternetPlugin, leaf: WorkspaceLeaf, url: string, title: string) {
       super(leaf);
-      this.query= query;
-      this.site = site;
-      this.url = url;
       this.plugin = plugin;
+      this.url = url;
+      this.title = title;
     }
 
     async onOpen() {
@@ -34,9 +32,9 @@ export class SearchView extends ItemView {
     }
 
     getDisplayText(): string {
-      return `${this.site}: ${this.query}`;
+      return `Wiki: ${this.url}`;
     }
-
+    
     getViewType(): string {
       return 'Search on Internet';
     }
