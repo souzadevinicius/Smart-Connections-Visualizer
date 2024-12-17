@@ -1,6 +1,8 @@
-import { Plugin, ItemView, WorkspaceLeaf, debounce, Notice } from 'obsidian';
+import { Setting, Plugin, ItemView, WorkspaceLeaf, debounce, Notice } from 'obsidian';
 import * as d3 from "d3";
 import _ from 'lodash';
+import { apiClient } from 'apiClient';
+import { SearchView } from 'view';
 
 const DEFAULT_NETWORK_SETTINGS : any = {
 	relevanceScoreThreshold: 0.5,
@@ -18,7 +20,9 @@ const DEFAULT_NETWORK_SETTINGS : any = {
 	nodeLabelSize: 6,
 	connectionType: 'block',
 	noteFillColor: '#7c8594',
-	blockFillColor: '#926ec9'
+	blockFillColor: '#926ec9',
+	wikiFillColor: '#145da0',
+	language: 'pt'
 }
 
 
@@ -49,6 +53,8 @@ interface PluginSettings {
 	connectionType: string;
 	noteFillColor: string;
 	blockFillColor: string;
+	wikiFillColor: string;
+	language: string;
 }
 
 declare global {
@@ -96,6 +102,8 @@ class ScGraphItemView extends ItemView {
 	nodeLabelSize = 6;
 	blockFillColor = '#926ec9';
 	noteFillColor = '#7c8594';
+	wikiFillColor = '#145da0';
+	language = 'pt';
 	startX = 0;
 	startY = 0;
 	nodes : any = [];
@@ -134,6 +142,9 @@ class ScGraphItemView extends ItemView {
         this.connectionType = this.plugin.settings.connectionType;
 		this.noteFillColor = this.plugin.settings.noteFillColor;
 		this.blockFillColor = this.plugin.settings.blockFillColor;
+		this.wikiFillColor = this.plugin.settings.wikiFillColor;
+		this.language = this.plugin.settings.language;
+
 
     }
 
@@ -368,7 +379,7 @@ class ScGraphItemView extends ItemView {
 		}
 				
 		
-		this.updateVisualization();
+		await this.updateVisualization();
 	}
 
 	async waitForSmartNotes() {
@@ -401,7 +412,7 @@ class ScGraphItemView extends ItemView {
 			.append('svg')
 			.attr('width', '100%')
 			.attr('height', '98%')
-			.attr('viewBox', `0 0 ${width} ${height}`)
+			.attr('viewBox', `${width/4} ${height/4} ${width/2} ${height/2}`)
 			.attr('preserveAspectRatio', 'xMidYMid meet')
 			.call(d3.zoom()
 				.scaleExtent([0.1, 10])
@@ -482,7 +493,7 @@ class ScGraphItemView extends ItemView {
 		const counts = types.map(type => this.nodes.filter((node: any) => (node.group === type) && node.id !== this.centralNode.id).length);
 
 		// Initialize colors with default values
-    	let colors: { [key: string]: string } = { 'block': DEFAULT_NETWORK_SETTINGS.blockFillColor, 'note': DEFAULT_NETWORK_SETTINGS.noteFillColor }; 
+    	let colors: { [key: string]: string } = { 'block': DEFAULT_NETWORK_SETTINGS.blockFillColor, 'note': DEFAULT_NETWORK_SETTINGS.noteFillColor, 'wiki': DEFAULT_NETWORK_SETTINGS.wikiFillColor }; 
 
 		// Iterate over nodes to find the color for each type
 		for (let node of this.nodes) {
@@ -548,7 +559,13 @@ class ScGraphItemView extends ItemView {
 
 		if (type === 'block' && color !== this.blockFillColor) {
 			this.blockFillColor = color;
-			this.plugin.settings.noteFillColor = color;
+			this.plugin.settings.blockFillColor = color;
+			this.plugin.saveSettings(); // Save the settings		
+		}
+
+		if (type === 'wiki' && color !== this.wikiFillColor) {
+			this.wikiFillColor = color;
+			this.plugin.settings.wikiFillColor = color;
 			this.plugin.saveSettings(); // Save the settings		
 		}
 
@@ -712,6 +729,25 @@ class ScGraphItemView extends ItemView {
 	}
 	
 	getFiltersContent(parent: HTMLElement) {
+		const sliderContainerLang = parent.createEl('div', { cls: 'smart-connections-visualizer-slider-container' });
+
+        sliderContainerLang.createEl('h2', { text: 'Language Settings' });
+        new Setting(sliderContainerLang)
+            .setName('Select Language')
+            .setDesc('Choose your preferred language')
+            .addDropdown(dropDown => {
+                dropDown.addOption('en', 'English');     // Option for English
+                dropDown.addOption('pt', 'Portuguese'); // Option for Portuguese
+                dropDown.setValue(this.plugin.settings.language); // Set the current value
+
+                dropDown.onChange(async (value) => {
+                    this.plugin.settings.language = value; // Update the setting with selected value
+                    apiClient.setLang(value);
+					this.updateVisualization();
+					await this.plugin.saveSettings(); // Save the updated settings
+                });
+            });
+
 		const sliderContainer1 = parent.createEl('div', { cls: 'smart-connections-visualizer-slider-container' });
 		sliderContainer1.createEl('label', { 
 			text: `Min relevance: ${(this.relevanceScoreThreshold * 100).toFixed(0)}%`, 
@@ -974,8 +1010,8 @@ class ScGraphItemView extends ItemView {
 		const scoreThresholdSlider = document.getElementById('smart-connections-visualizer-scoreThreshold') as HTMLInputElement;
 		if (scoreThresholdSlider) {
 			scoreThresholdSlider.addEventListener('input', (event) => this.updateScoreThreshold(event));
-			const debouncedUpdate = debounce((event: Event) => {
-				this.updateVisualization(parseFloat((event.target as HTMLInputElement).value));
+			const debouncedUpdate = debounce(async(event: Event) => {
+				await this.updateVisualization(parseFloat((event.target as HTMLInputElement).value));
 			}, 500, true);			
 			scoreThresholdSlider.addEventListener('input', debouncedUpdate);
 		}
@@ -1149,12 +1185,12 @@ class ScGraphItemView extends ItemView {
 		connectionTypeRadios.forEach(radio => radio.addEventListener('change', (event) => this.updateConnectionType(event)));
 	}
 
-	updateConnectionType(event: any) {
+	async updateConnectionType(event: any) {
 		this.connectionType = event.target.value;
 		this.isChangingConnectionType = true;
 		this.plugin.settings.connectionType = this.connectionType; // Update the settings
         this.plugin.saveSettings(); // Save the settings
-		this.updateVisualization();
+		await this.updateVisualization();
 	}
 
 	setupMaxLabelCharactersSlider() {
@@ -1216,10 +1252,10 @@ class ScGraphItemView extends ItemView {
 
 	setupRefreshIcon() {
 		const refreshIcon = document.getElementById('smart-connections-visualizer-refresh-icon');
-		if (refreshIcon) refreshIcon.addEventListener('click', () => this.resetToDefault());
+		if (refreshIcon) refreshIcon.addEventListener('click', async() => await this.resetToDefault());
 	}
 
-	resetToDefault() {
+	async resetToDefault() {
 
 		// Reset all values to their default
 		this.relevanceScoreThreshold = DEFAULT_NETWORK_SETTINGS.relevanceScoreThreshold;
@@ -1238,6 +1274,8 @@ class ScGraphItemView extends ItemView {
 		this.connectionType = DEFAULT_NETWORK_SETTINGS.connectionType;
 		this.noteFillColor = DEFAULT_NETWORK_SETTINGS.noteFillColor;
 		this.blockFillColor = DEFAULT_NETWORK_SETTINGS.blockFillColor;
+		this.wikiFillColor = DEFAULT_NETWORK_SETTINGS.wikiFillColor;
+		this.language = DEFAULT_NETWORK_SETTINGS.language;
 
 		// Save plugin settings
 		this.plugin.settings.relevanceScoreThreshold = DEFAULT_NETWORK_SETTINGS.relevanceScoreThreshold;
@@ -1256,6 +1294,7 @@ class ScGraphItemView extends ItemView {
 		this.plugin.settings.connectionType = DEFAULT_NETWORK_SETTINGS.connectionType;
 		this.plugin.settings.noteFillColor = DEFAULT_NETWORK_SETTINGS.noteFillColor;
 		this.plugin.settings.blockFillColor = DEFAULT_NETWORK_SETTINGS.blockFillColor;
+		this.plugin.settings.wikiFillColor = DEFAULT_NETWORK_SETTINGS.wikiFillColor;
         this.plugin.saveSettings(); // Save the settings
 
 		// Update visualization
@@ -1264,7 +1303,7 @@ class ScGraphItemView extends ItemView {
 		this.updateNodeSizes();
 		this.updateLinkThickness();
 		this.updateSimulationForces();
-		this.updateVisualization(this.relevanceScoreThreshold);
+		await this.updateVisualization(this.relevanceScoreThreshold);
 		
 	}
 
@@ -1331,7 +1370,7 @@ class ScGraphItemView extends ItemView {
 		});
 	}
 
-	updateVisualization(newScoreThreshold?: number) {
+	async updateVisualization(newScoreThreshold?: number, nodeName?: string) {
 
 		// Only update if we're not already updating
 		if (this.updatingVisualization && !this.isChangingConnectionType) {
@@ -1346,16 +1385,17 @@ class ScGraphItemView extends ItemView {
 			this.relevanceScoreThreshold = newScoreThreshold;
 		}
 	
-		this.updateConnections();
+		await this.updateConnections(nodeName);
 
 		const filteredConnections = this.connections.filter((connection: any) => connection.score >= this.relevanceScoreThreshold);
+		
 		const visibleNodes = new Set<string>();
 		filteredConnections.forEach((connection: any) => {
 			visibleNodes.add(connection.source);
 			visibleNodes.add(connection.target);
 		});
 		// Always include the central node
-		visibleNodes.add(this.centralNote.key);
+		visibleNodes.add(this.centralNote?.key);
 		const nodesData = Array.from(visibleNodes).map((id: any) => {
 			const node = this.nodes.find((node: any) => node.id === id);
 			return node ? node : null;
@@ -1450,21 +1490,53 @@ class ScGraphItemView extends ItemView {
 	}
 	
 	
+	async getWikiNodes(nodeTitle: string) {
+		const title = nodeTitle != '' ? nodeTitle : this?.currentNoteKey?.split('/')?.pop()?.replace(".md", "") || '';
+		const res = await apiClient.getResponse(title.replace(".md", "")).then(content => content).catch(e => console.info(e));
+		if (!res)
+			return [];
+		const noteConnections = res?.map(l => ({
+			item: {
+				url:l?.content_urls?.desktop?.page,
+				title:`${l?.normalizedtitle}.md`,
+				key:`${l?.normalizedtitle}.md`,
+				fill: this.wikiFillColor,
+				id:`${l?.normalizedtitle}.md`,
+				type: 'wiki'
+			},
+			score: 1,
+		}))
+		return noteConnections;
+	}
 	
-	updateConnections() {
+	async updateConnections(nodeName?: string) {
 		this.nodes = [];
 		this.links = [];
 		this.connections = [];
 		this.minScore = 1;
 		this.maxScore = 0;
-		if (!this.currentNoteKey) return;
-		this.centralNote = this.smartNotes[this.currentNoteKey];
+		let currentNoteKey =  nodeName || this.currentNoteKey;
+		if (!currentNoteKey) return;
+		this.centralNote = this.smartNotes[currentNoteKey] || {
+			url:`https://en.wikipedia.org/wiki/${nodeName}`,
+			title:nodeName,
+			key:nodeName,
+			id:nodeName,
+			type: 'wiki'
+		};
+		this.currentNoteKey = this.centralNote.key; 
 		console.log('central note: ', this.centralNote);
 
 		// console.log('central note connections: ', parse(stringify(this.centralNote.find_connections())));
+		let noteConnections = [];
+		if (this.centralNote && this.centralNote.find_connections){
+			noteConnections = this.centralNote.find_connections().filter(
+				(connection: any) => connection.score >= this.relevanceScoreThreshold);
+		}
+		const wikiNodes = await this.getWikiNodes(this.currentNoteKey); 
+		noteConnections = noteConnections.concat(wikiNodes);
+		
 
-		const noteConnections = this.centralNote.find_connections().filter(
-			(connection: any) => connection.score >= this.relevanceScoreThreshold);
 		this.addCentralNode();
 		this.addFilteredConnections(noteConnections);
 		const isValid = this.validateGraphData(this.nodes, this.links);
@@ -1487,9 +1559,10 @@ class ScGraphItemView extends ItemView {
 				y: height / 2,
 				fx: null,
 				fy: null,
-				fill: this.noteFillColor,
+				fill: this?.centralNote?.type === 'wiki' ? this.wikiFillColor : this.noteFillColor,
 				selected: false,
-				highlighted: false
+				highlighted: false,
+				type: this.centralNote?.type
 			});
 			this.centralNode = this.nodes[this.nodes.length - 1];
 		} else {
@@ -1500,11 +1573,11 @@ class ScGraphItemView extends ItemView {
 	addFilteredConnections(noteConnections: any) {
 
 		const filteredConnections = noteConnections.filter((connection: any) => {
-			if (this.connectionType === 'both') {
+			if (this.connectionType === 'both' ) {
 				return true; // return all connections
 			} else {
 				// If connectionType is block, return true if connection is a SmartBlock, otherwise return false
-				return (this.connectionType === 'block') === (connection.item instanceof this.env.item_types.SmartBlock);
+				return (this.connectionType === 'block') === (connection.item instanceof this.env.item_types.SmartBlock) || connection?.item?.type === 'wiki';
 
 			}
 		});		// console.log('Filtered connections:', filteredConnections);
@@ -1536,9 +1609,11 @@ class ScGraphItemView extends ItemView {
 				y: Math.random() * 1000,
 				fx: null,
 				fy: null,
-				fill: (connection.item instanceof this.env.item_types.SmartBlock) ? this.blockFillColor : this.noteFillColor,
+				fill: (connection.item instanceof this.env.item_types.SmartBlock) ? this.blockFillColor : connection?.item?.type === 'wiki' ? this.wikiFillColor : this.noteFillColor,
 				selected: false,
-				highlighted: false
+				highlighted: false,
+				type: connection?.item?.type,
+				url: connection?.item?.url
 			});
 		} else {
 			console.log('Node already exists for connection ID:',connectionId);
@@ -1711,13 +1786,53 @@ class ScGraphItemView extends ItemView {
 
 
 	}
+
+	async openSearch(node: any) {
+		const newTitle = `Search: ${node?.name}`; // Define the new title based on the URL
+		// Get the current active leaf
+		const leaf = this.app.workspace.activeLeaf;
+
+		if (leaf && leaf.view instanceof SearchView) {
+			// If there's an existing SearchView, update its URL and set its state
+			leaf.view.frame.setAttr('src', node?.url);
+			leaf.view.url = node?.url;
+
+			// Update display text using setViewState
+			this.app.workspace?.activeLeaf?.setViewState({
+				type: leaf.view.getViewType(),
+				active: true,
+				state: { viewTitle: newTitle } // Pass the new title in state
+			});
+			this.app.workspace.setActiveLeaf(leaf); // Ensure it's the active leaf
+		} else {
+			// If no active SearchView, create a new one
+			const newLeaf = this.app.workspace.getLeaf(true); // true ensures it's a new leaf
+			const view = new SearchView(this, newLeaf, node?.url, node?.name);
+			await newLeaf.open(view);
+
+			// Set initial display text via setViewState for the newly created view
+			await newLeaf.setViewState({
+				type: view.getViewType(),
+				active: true,
+				state: { viewTitle: newTitle } // Set initial title for the new view
+			});
+			this.app.workspace.setActiveLeaf(newLeaf); // Set this leaf as active
+		}
+	}
 	
-	onNodeClick(event: any, d: any) {
+	async onNodeClick(event: any, d: any) {
 
 		// Don't need to touch central since we're in it
 		if(d.id === this.centralNode.id) return;
 
-		this.env.plugin.open_note(d.id, event)
+		
+		
+		if (d?.type === 'wiki')
+			await this.openSearch(d);
+		else
+			this.env.plugin.open_note(d.id, event)
+		
+		await this.updateVisualization(this.relevanceScoreThreshold, d?.name);
 
 		// event.stopPropagation();
 		// TODO:: Bring back when ready for selection

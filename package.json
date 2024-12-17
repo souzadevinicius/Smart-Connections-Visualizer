@@ -1,7 +1,7 @@
 {
-	"name": "smart-connections-visualizer",
-	"version": "1.0.19",
-	"description": "A plugin that allows you to view your Smart Connections in a visualized format.",
+	"name": "smart-wiki-connections-visualizer",
+	"version": "1.0.0",
+	"description": "A plugin that allows you to view your Smart Connections plus Wikipedia in a visualized format.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
@@ -12,11 +12,13 @@
 		"Obsidian",
 		"Smart Connections",
 		"Visualizer",
+		"Wikipedia",
 		"Smart Connections Visualizer",
+		"Smart Connections Wiki Visualizer",
 		"Graph",
 		"View"
 	],
-	"author": "Evan Moscoso",
+	"author": "Vinícius de Souza",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/d3": "^7.4.3",
@@ -35,6 +37,7 @@
 		"bootstrap": "^5.3.3",
 		"d3": "^7.9.0",
 		"flatted": "^3.3.1",
-		"lodash": "^4.17.21"
+		"lodash": "^4.17.21",
+		"wikipedia": "^2.1.2"
 	}
 }
