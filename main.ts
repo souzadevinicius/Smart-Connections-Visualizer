@@ -1,8 +1,9 @@
-import { Setting, Plugin, ItemView, WorkspaceLeaf, debounce, Notice } from 'obsidian';
+import { TFile, Setting, Plugin, ItemView, WorkspaceLeaf, debounce, Notice } from 'obsidian';
 import * as d3 from "d3";
 import _ from 'lodash';
 import { apiClient } from 'apiClient';
 import { SearchView } from 'view';
+import { lang } from 'lang';
 
 const DEFAULT_NETWORK_SETTINGS : any = {
 	relevanceScoreThreshold: 0.5,
@@ -22,7 +23,7 @@ const DEFAULT_NETWORK_SETTINGS : any = {
 	noteFillColor: '#7c8594',
 	blockFillColor: '#926ec9',
 	wikiFillColor: '#145da0',
-	language: 'pt'
+	language: 'en'
 }
 
 
@@ -67,7 +68,8 @@ class ScGraphItemView extends ItemView {
 
 	private plugin: ScGraphView;
 
-	currentNoteKey: string; 
+	currentNoteKey: string;
+	noteConnections: any; 
 	centralNote: any;
 	centralNode: any;
 	connectionType = 'block';
@@ -103,7 +105,7 @@ class ScGraphItemView extends ItemView {
 	blockFillColor = '#926ec9';
 	noteFillColor = '#7c8594';
 	wikiFillColor = '#145da0';
-	language = 'pt';
+	language = 'en';
 	startX = 0;
 	startY = 0;
 	nodes : any = [];
@@ -344,7 +346,6 @@ class ScGraphItemView extends ItemView {
 	async onOpen() {
 		this.contentEl.createEl('h2', { text: 'Smart Visualizer' });
 		this.contentEl.createEl('p', { text: 'Waiting for Smart Connections to load...' });
-		console.log(this.app);
 
 		 // Introduce a small delay before rendering to give view time to load
 		 setTimeout(() => {
@@ -387,7 +388,6 @@ class ScGraphItemView extends ItemView {
 		const delay = 2000; // Delay in milliseconds between retries
 	
 		for (let attempt = 0; attempt < maxRetries; attempt++) {
-			console.log(this.env);
 			if (this.env?.entities_loaded) {
 				return;
 			}
@@ -421,8 +421,20 @@ class ScGraphItemView extends ItemView {
 					this.updateLabelOpacity(event.transform.k);
 				}));
 				
-		const svgGroup = svg.append('g');
+		// Define the arrowhead marker
+		svg.append('defs').append('marker')
+		.attr('id', 'arrowhead')
+		.attr('orient', 'auto')
+		.attr('markerWidth', 10)
+		.attr('markerHeight', 10)
+		.attr('refX', 5)
+		.attr('refY', 2.5)
+		.append('polygon')
+		.attr('points', '0,0 10,5 0,10')
+		.attr('fill', '#999');
 	
+		const svgGroup = svg.append('g');
+
 		svgGroup.append('g').attr('class', 'smart-connections-visualizer-links');
 		svgGroup.append('g').attr('class', 'smart-connections-visualizer-node-labels');
 		svgGroup.append('g').attr('class', 'smart-connections-visualizer-link-labels');
@@ -831,7 +843,7 @@ class ScGraphItemView extends ItemView {
 		const forcesSettings = [
 			{ id: 'smart-connections-visualizer-repelForce', label: 'Repel force', value: this.repelForce, min: 0, max: 1500, step: 1 },
 			{ id: 'smart-connections-visualizer-linkForce', label: 'Link force', value: this.linkForce, min: 0, max: 1, step: 0.01 },
-			{ id: 'smart-connections-visualizer-linkDistance', label: 'Link distance', value: this.linkDistance, min: 10, max: 200, step: 1 }
+			{ id: 'smart-connections-visualizer-linkDistance', label: 'Link distance', value: this.linkDistance, min: 1, max: 200, step: 1 }
 		];
 	
 		forcesSettings.forEach(setting => {
@@ -1231,7 +1243,6 @@ class ScGraphItemView extends ItemView {
 	}
 
 	updateNodeLabelSize(event: any) {
-		console.log('flounddd');
 		const newNodeLabelSize = parseFloat(event.target.value);
 		const label = document.getElementById('smart-connections-visualizer-nodeLabelSizeLabel');
 		if (label) label.textContent = `Node Label Size: ${newNodeLabelSize}`;
@@ -1368,6 +1379,19 @@ class ScGraphItemView extends ItemView {
 				this.render();
 			}
 		});
+		let lastLeaf: string;
+		this.registerEvent(
+			this.app.workspace.on('active-leaf-change', async(leaf) => {
+				const existingLeaf = this.app.workspace.getLeavesOfType("smart-connections-visualizer")[0];
+				if(existingLeaf){
+					const l = existingLeaf.view as ScGraphItemView;
+					const leafName = leaf?.view?.file?.path || leaf?.view?.title;
+					if (leafName && this.currentNoteKey != leafName && !this.isHovering && this.containerEl.children[1].checkVisibility()) {
+						return this.updateVisualization(this.relevanceScoreThreshold, leafName);
+					}
+				}
+            }) 	
+        );
 	}
 
 	async updateVisualization(newScoreThreshold?: number, nodeName?: string) {
@@ -1425,7 +1449,8 @@ class ScGraphItemView extends ItemView {
 			const sourceNode = nodesData.find((node: any) => node.id === link.source);
 			const targetNode = nodesData.find((node: any) => node.id === link.target);
 			if (!sourceNode || !targetNode) {
-				console.warn(`Link source or target node not found: ${link.source}, ${link.target}`);
+				// console.log(sourceNode, targetNode, nodesData, link.source, link.targetx)
+				// console.warn(`Link source or target node not found: ${link.source}, ${link.target}`);
 			}
 			return sourceNode && targetNode;
 		});
@@ -1490,15 +1515,33 @@ class ScGraphItemView extends ItemView {
 	}
 	
 	
-	async getWikiNodes(nodeTitle: string) {
-		const title = nodeTitle != '' ? nodeTitle : this?.currentNoteKey?.split('/')?.pop()?.replace(".md", "") || '';
-		const res = await apiClient.getResponse(title.replace(".md", "")).then(content => content).catch(e => console.info(e));
-		if (!res)
-			return [];
+	async getWikiNodes(node) {
+		if (!node) return
+		const title = node?.item?.name || node;
+		let titleName = title?.split('/')?.pop()?.replace('.md', '');
+		let titleLang = lang.detectLanguage(titleName);
+		apiClient.setLang(titleLang);
+		let res = await apiClient.getResponse(titleName).then(content => content).catch(e => console.info(e));
+		if (!res){
+			const aliases = this.getAliases(title);
+			for (const alias of aliases) {
+				let titleLang = lang.detectLanguage(alias)
+				apiClient.setLang(titleLang);
+				res = await apiClient.getResponse(alias).then(content => content).catch(e => console.info(e));
+				if (res !== null) {
+					break;
+				}
+			}
+		}
+		if(!res){
+			return []
+		}
+		
 		const noteConnections = res?.map(l => ({
 			item: {
 				url:l?.content_urls?.desktop?.page,
 				title:`${l?.normalizedtitle}.md`,
+				lastName:`${l?.normalizedtitle}.md`,
 				key:`${l?.normalizedtitle}.md`,
 				fill: this.wikiFillColor,
 				id:`${l?.normalizedtitle}.md`,
@@ -1524,26 +1567,63 @@ class ScGraphItemView extends ItemView {
 			id:nodeName,
 			type: 'wiki'
 		};
-		this.currentNoteKey = this.centralNote.key; 
-		console.log('central note: ', this.centralNote);
 
-		// console.log('central note connections: ', parse(stringify(this.centralNote.find_connections())));
-		let noteConnections = [];
-		if (this.centralNote && this.centralNote.find_connections){
-			noteConnections = this.centralNote.find_connections().filter(
-				(connection: any) => connection.score >= this.relevanceScoreThreshold);
-		}
-		const wikiNodes = await this.getWikiNodes(this.currentNoteKey); 
-		noteConnections = noteConnections.concat(wikiNodes);
 		
-
-		this.addCentralNode();
-		this.addFilteredConnections(noteConnections);
+		this.currentNoteKey = this.centralNote.key; 
+		// console.log('central note: ', this.centralNote);
+		
+		// console.log('central note connections: ', parse(stringify(this.centralNote.find_connections())));
+		let originalCentral = this.noteConnections || [];
+		if (this.centralNote && this.centralNote.find_connections){
+			this.noteConnections = [];
+			//TODO: CHANGE THIS
+			this.noteConnections = this.centralNote.find_connections().filter(
+				(connection: any) => 
+					connection.score >= this.relevanceScoreThreshold && 
+					!(connection.item instanceof this.env.item_types.SmartBlock)
+			);
+			const ideasLenght = 5;
+			const nSlice = this.noteConnections.length > ideasLenght ? ideasLenght : this.noteConnections.length;
+			// Create an array of promises using map instead of forEach
+			const promises = this.noteConnections.slice(0, nSlice).map(async (n) => {
+				const source = n?.item?.data?.path;
+				const wikiNodes = await this.getWikiNodes(n);
+				return wikiNodes?.map(node => {
+					return {
+						...node, // Spread the existing properties of the node
+						source: source // Add or update the source property
+					};
+				});
+			});
+			const wikiConnections = await this.getWikiNodes(this.centralNote.key);
+			const wikiConnections2 = await Promise.all(promises);
+			this.addCentralNode();
+			const connections = [this.noteConnections, wikiConnections, wikiConnections2.flat()];
+			const flatConnections = [].concat(...connections); 
+			this.addFilteredConnections(flatConnections);
+	
+		} else {
+			const wikiConnections = await this.getWikiNodes(this.centralNote.key);
+			this.addCentralNode();
+			this.addFilteredConnections(originalCentral.concat(wikiConnections));
+		}
+		
+		// Call the functions after all asynchronous operations are complete
 		const isValid = this.validateGraphData(this.nodes, this.links);
 		if (!isValid) console.error('Graph data validation failed.');
 	}
 	
 	
+	getAliases(source: any) {
+		try {
+			const file = this.app.vault.getAbstractFileByPath(source) as TFile;
+			const metadata = this.app.metadataCache?.getFileCache(file);
+			return metadata?.frontmatter?.aliases || []; // Get aliases or default to an empty array
+		} catch (error) {
+			return []			
+		}
+	}
+
 	addCentralNode() {
 		
 		if (this.centralNote.key && this.centralNote.key.trim() !== '' && !this.nodes.some((node: { id: any; }) => node.id === this.centralNote.key)) {
@@ -1554,6 +1634,7 @@ class ScGraphItemView extends ItemView {
 			this.nodes.push({
 				id: this.centralNote.key,
 				name: this.centralNote.key,
+				lastName: this.centralNote.key?.split('/')?.pop(),
 				group: 'note',
 				x: width / 2,
 				y: height / 2,
@@ -1571,7 +1652,30 @@ class ScGraphItemView extends ItemView {
 	}
 	
 	addFilteredConnections(noteConnections: any) {
+		const mergeDuplicates = (arr) => {
+			const map = new Map();
+		
+			// Process each object in the concatenated array
+			arr.forEach(item => {
+				const lastName = item?.item?.data?.path?.split('/')?.pop() || item?.item?.lastName;
+				if (map.has(lastName)) {
+					// item.id = item?.id?.indexOf('/') > -1 ? item?.id : map.get(item.id)?.id;
+					// item.key = item?.id?.indexOf('/') > -1 ? item?.id : map.get(item.id)?.id;
+					// item.type = item?.id?.indexOf('/') > -1 ? 'note' : map.get(item.id)?.type;
+					item.fill = '#FF0000';
+					map.set(lastName, { ...map.get(lastName), ...item });
+				} else {
+					// Add new object
+					map.set(lastName, { ...item });
+				}
+			});
+		
+			// Convert Map back to an array
+			return Array.from(map.values());
+		};
 
+
+		// noteConnections = mergeDuplicates(noteConnections.slice());
 		const filteredConnections = noteConnections.filter((connection: any) => {
 			if (this.connectionType === 'both' ) {
 				return true; // return all connections
@@ -1580,12 +1684,12 @@ class ScGraphItemView extends ItemView {
 				return (this.connectionType === 'block') === (connection.item instanceof this.env.item_types.SmartBlock) || connection?.item?.type === 'wiki';
 
 			}
-		});		// console.log('Filtered connections:', filteredConnections);
+		});		
+		// console.log('Filtered connections:', filteredConnections);
 		filteredConnections.forEach((connection: any, index: any) => {
 			// console.log('Filtered connection:', connection, 'Index:', index);
 			if (connection && connection.item && connection.item.key) {
 				const connectionId = connection.item.key;
-				// console.log('Adding connection node for ID:', connectionId);
 
 				this.addConnectionNode(connectionId, connection);
 				// console.log('Adding connection link for ID:', connectionId);
@@ -1595,8 +1699,25 @@ class ScGraphItemView extends ItemView {
 				console.warn(`Skipping invalid connection at index ${index}:`, connection);
 			}
 		});
-		// console.log('Nodes after addFilteredConnections:', this.nodes);
-		// console.log('Links after addFilteredConnections:', this.links);	
+		this.nodes = this.nodes.sort((a, b) => {
+			const nameA = a.lastName.toUpperCase(); // ignore case
+			const nameB = b.lastName.toUpperCase(); // ignore case
+			if (nameA < nameB) return -1;
+			if (nameA > nameB) return 1;
+			return 0; // names are equal
+		});
+		
+
+		this.links = this.links.sort((a, b) => {
+			const nameA = a.target?.split('/')?.pop().toUpperCase(); // ignore case
+			const nameB = b.target?.split('/')?.pop().toUpperCase(); // ignore case
+			if (nameA < nameB) return -1;
+			if (nameA > nameB) return 1;
+			return 0; // names are equal
+		});
+
+		console.log('Nodes after addFilteredConnections:', this.nodes);
+		console.log('Links after addFilteredConnections:', this.links);	
 	}
 
 	addConnectionNode(connectionId: any, connection: any) {
@@ -1605,24 +1726,29 @@ class ScGraphItemView extends ItemView {
 				id: connectionId,
 				name: connectionId,
 				group: (connection.item instanceof this.env.item_types.SmartBlock) ? 'block' : 'note',
+				lastName: connectionId?.split('/')?.pop(),
 				x: Math.random() * 1000,
 				y: Math.random() * 1000,
 				fx: null,
 				fy: null,
-				fill: (connection.item instanceof this.env.item_types.SmartBlock) ? this.blockFillColor : connection?.item?.type === 'wiki' ? this.wikiFillColor : this.noteFillColor,
+				fill: connection.item.fill ? connection.item.fill : (connection.item instanceof this.env.item_types.SmartBlock) ? this.blockFillColor : connection?.item?.type === 'wiki' ? this.wikiFillColor : this.noteFillColor,
 				selected: false,
 				highlighted: false,
 				type: connection?.item?.type,
 				url: connection?.item?.url
 			});
 		} else {
-			console.log('Node already exists for connection ID:',connectionId);
+			const node = this.nodes.find((node: { id: string; }) => node.id === connectionId)
+			node.type = ''
+			node.fill = '#FF0000'
+			// console.log('Node already exists for connection ID:',connectionId);
 		}
 	}
 	
 	addConnectionLink(connectionId: string, connection: any) {
-		const sourceNode = this.nodes.find((node: { id: string; }) => node.id === this.centralNote.key);
-		const targetNode = this.nodes.find((node: { id: string; }) => node.id === connectionId);
+		const sourceID = connection?.source || this.centralNote.key;
+		const sourceNode = this.nodes.find((node: { id: string; }) => node.id === sourceID);
+		const targetNode = this.nodes.find((node: { id: string; }) => (node.id === connectionId) || (node.id === connectionId?.split('/')?.pop()));
 	
 		if (!sourceNode) {
 			console.error(`Source node not found: ${this.centralNote.key}`);
@@ -1633,15 +1759,17 @@ class ScGraphItemView extends ItemView {
 			console.error(`Target node not found: ${connectionId}`);
 			return;
 		}
-	
+
 		this.links.push({
-			source: this.centralNote.key,
+			source: sourceNode.id,
 			target: connectionId,
+			lastName: connectionId?.split('/')?.pop(),
 			value: connection.score || 0
 		});
 		this.connections.push({
-			source: this.centralNote.key,
+			source: sourceNode.id,
 			target: connectionId,
+			lastName: connectionId?.split('/')?.pop(),
 			score: connection.score || 0
 		});
 		this.updateScoreRange(connection.score);
@@ -1682,6 +1810,7 @@ class ScGraphItemView extends ItemView {
 		 // Update links first
 		 this.linkSelection = svgGroup.select('g.smart-connections-visualizer-links').selectAll('line')
 		 .data(this.validatedLinks, (d: any) => `${d.source}-${d.target}`)
+		 .attr('marker-end', 'url(#arrowhead)')
 		 .join(
 			 enter => this.enterLink(enter),
 			 update => this.updateLink(update),
@@ -1834,7 +1963,7 @@ class ScGraphItemView extends ItemView {
 		
 		await this.updateVisualization(this.relevanceScoreThreshold, d?.name);
 
-		// event.stopPropagation();
+		event.stopPropagation();
 		// TODO:: Bring back when ready for selection
 
 		// if (!this.isAltPressed) this.clearSelections();
@@ -1898,6 +2027,7 @@ class ScGraphItemView extends ItemView {
 	updateLinkSelection(svgGroup: any) {
 		return svgGroup.select('g.links').selectAll('line')
 			.data(this.validatedLinks, (d: any) => `${d.source}-${d.target}`)
+			.attr('marker-end', 'url(#arrowhead)') // Attach the arrowhead
 			.style('cursor', 'pointer')
 			.join(
 				(enter: any) => this.enterLink(enter),
@@ -1931,6 +2061,7 @@ class ScGraphItemView extends ItemView {
 			.attr('class', 'smart-connections-visualizer-link-labels')
 			.selectAll('text')
 			.data(this.validatedLinks, (d: any) => `${d.source.id}-${d.target.id}`)
+			.attr('marker-end', 'url(#arrowhead)')
 			.join(
 				(enter: any) => this.enterLinkLabel(enter),
 				(update: any) => this.updateLinkLabel(update),

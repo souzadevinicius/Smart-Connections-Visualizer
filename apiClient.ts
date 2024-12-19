@@ -16,7 +16,7 @@ function __minimizeUrl(url: string) {
   return url?.replace(/\n\s*/g, "");
 }
 
-let restApiLang = 'pt'
+let restApiLang = 'en'
 
 function RestApiBase() {
   return `https://${restApiLang}.wikipedia.org/api/rest_v1`
@@ -200,6 +200,10 @@ function setLang(language: string) {
   restApiLang = language;
 }
 
+function getLang() {
+  return restApiLang;
+}
+
 export const apiClient = {
   // suggest,
   page,
@@ -209,6 +213,7 @@ export const apiClient = {
 
   getResponse,
   getItem,
+  getLang,
 
   // languages,
   // loadLangs,
