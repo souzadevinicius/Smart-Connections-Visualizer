@@ -1736,6 +1736,8 @@ class ScGraphItemView extends ItemView {
 			return;
 		}
 
+		targetNode.size = targetNode.size ? targetNode.size + 2 : this.nodeSize + 2;
+
 		this.links.push({
 			source: sourceNode?.id?.split('/')?.pop(),
 			target: connectionId?.split('/')?.pop(),
@@ -1828,7 +1830,7 @@ class ScGraphItemView extends ItemView {
 		const that = this;  // Reference to 'this' context for inner functions
 		return enter.append('circle')
 			.attr('class', 'smart-connections-visualizer-node')
-			.attr('r', (d: any) => d.id === this.centralNode.id ? this.nodeSize + 2 : this.nodeSize)
+			.attr('r', (d: any) => d.id === this.centralNode.id ? this.nodeSize + 2 : d.size)
 			.attr('fill', (d: any) => d.fill)
 			.attr('stroke', (d: any) => d.selected ? 'blanchedalmond' : 'transparent')
 			.attr('stroke-width', (d: any) => d.selected ? 1.5 : 0.3)
@@ -1843,7 +1845,7 @@ class ScGraphItemView extends ItemView {
 	}
 
 	updateNode(update: any) {
-		return update.attr('r', (d: any) => d.id === this.centralNode.id ? this.nodeSize + 2 : this.nodeSize)
+		return update.attr('r', (d: any) => d.id === this.centralNode.id ? this.nodeSize : this.nodeSize)
 			.attr('fill', (d: any) => d.selected ? '#f3ee5d' : d.fill)
 			.attr('stroke', (d: any) => d.selected ? 'blanchedalmond' : 'transparent')
 			.attr('stroke-width', (d: any) => d.selected ? 1.5 : 0.3);
@@ -2067,8 +2069,9 @@ class ScGraphItemView extends ItemView {
 		return enter.append('text')
 			.attr('class', 'smart-connections-visualizer-label')
 			.attr('dx', 0)
-			.attr('font-size', this.nodeLabelSize)
-			.attr('dy', 12)
+			.attr('font-size', (d: any) => d.id === this.centralNode.id ? this.nodeSize + 2 : d.size)
+			// .attr('font-size', this.nodeLabelSize)
+			.attr('dy', -10)
 			.attr('text-anchor', 'middle')
 			.attr('fill', '#bbb')
 			.attr('data-id', (d: any) => d.id)
@@ -2093,7 +2096,7 @@ class ScGraphItemView extends ItemView {
 	
 
 	updateNodeSizes() {
-		this.nodeSelection.attr('r', (d: any) => d.id === this.centralNode.id ? this.nodeSize + 3 : this.nodeSize);
+		this.nodeSelection.attr('r', (d: any) => d.id === this.centralNode.id ? this.nodeSize : this.nodeSize);
 	}
 
 	updateLinkThickness() {
