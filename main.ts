@@ -1541,7 +1541,6 @@ class ScGraphItemView extends ItemView {
 			item: {
 				url:l?.content_urls?.desktop?.page,
 				title:`${l?.normalizedtitle}.md`,
-				lastName:`${l?.normalizedtitle}.md`,
 				key:`${l?.normalizedtitle}.md`,
 				fill: this.wikiFillColor,
 				id:`${l?.normalizedtitle}.md`,
@@ -1632,9 +1631,8 @@ class ScGraphItemView extends ItemView {
 			const { width, height } = svg.getBoundingClientRect();
 
 			this.nodes.push({
-				id: this.centralNote.key,
+				id: this.centralNote.key?.split('/')?.pop(),
 				name: this.centralNote.key,
-				lastName: this.centralNote.key?.split('/')?.pop(),
 				group: 'note',
 				x: width / 2,
 				y: height / 2,
@@ -1652,30 +1650,6 @@ class ScGraphItemView extends ItemView {
 	}
 	
 	addFilteredConnections(noteConnections: any) {
-		const mergeDuplicates = (arr) => {
-			const map = new Map();
-		
-			// Process each object in the concatenated array
-			arr.forEach(item => {
-				const lastName = item?.item?.data?.path?.split('/')?.pop() || item?.item?.lastName;
-				if (map.has(lastName)) {
-					// item.id = item?.id?.indexOf('/') > -1 ? item?.id : map.get(item.id)?.id;
-					// item.key = item?.id?.indexOf('/') > -1 ? item?.id : map.get(item.id)?.id;
-					// item.type = item?.id?.indexOf('/') > -1 ? 'note' : map.get(item.id)?.type;
-					item.fill = '#FF0000';
-					map.set(lastName, { ...map.get(lastName), ...item });
-				} else {
-					// Add new object
-					map.set(lastName, { ...item });
-				}
-			});
-		
-			// Convert Map back to an array
-			return Array.from(map.values());
-		};
-
-
-		// noteConnections = mergeDuplicates(noteConnections.slice());
 		const filteredConnections = noteConnections.filter((connection: any) => {
 			if (this.connectionType === 'both' ) {
 				return true; // return all connections
@@ -1700,8 +1674,8 @@ class ScGraphItemView extends ItemView {
 			}
 		});
 		this.nodes = this.nodes.sort((a, b) => {
-			const nameA = a.lastName.toUpperCase(); // ignore case
-			const nameB = b.lastName.toUpperCase(); // ignore case
+			const nameA = a.id.toUpperCase(); // ignore case
+			const nameB = b.id.toUpperCase(); // ignore case
 			if (nameA < nameB) return -1;
 			if (nameA > nameB) return 1;
 			return 0; // names are equal
@@ -1716,17 +1690,17 @@ class ScGraphItemView extends ItemView {
 			return 0; // names are equal
 		});
 
-		console.log('Nodes after addFilteredConnections:', this.nodes);
-		console.log('Links after addFilteredConnections:', this.links);	
+		// console.log('Nodes after addFilteredConnections:', this.nodes);
+		// console.log('Links after addFilteredConnections:', this.links);	
 	}
 
 	addConnectionNode(connectionId: any, connection: any) {
-		if (!this.nodes.some((node: { id: string; }) => node.id === connectionId)) {
+		if (!this.nodes.some((node: { id: string; }) => node.id === connectionId?.split('/')?.pop())) {
 			this.nodes.push({
-				id: connectionId,
+				// id: connectionId,
+				id: connectionId?.split('/')?.pop(),
 				name: connectionId,
 				group: (connection.item instanceof this.env.item_types.SmartBlock) ? 'block' : 'note',
-				lastName: connectionId?.split('/')?.pop(),
 				x: Math.random() * 1000,
 				y: Math.random() * 1000,
 				fx: null,
@@ -1746,12 +1720,13 @@ class ScGraphItemView extends ItemView {
 	}
 	
 	addConnectionLink(connectionId: string, connection: any) {
-		const sourceID = connection?.source || this.centralNote.key;
+		let sourceID = connection?.source || this.centralNote.key;
+		sourceID = sourceID?.split('/')?.pop()
 		const sourceNode = this.nodes.find((node: { id: string; }) => node.id === sourceID);
 		const targetNode = this.nodes.find((node: { id: string; }) => (node.id === connectionId) || (node.id === connectionId?.split('/')?.pop()));
 	
 		if (!sourceNode) {
-			console.error(`Source node not found: ${this.centralNote.key}`);
+			console.error(`Source node not found: ${sourceID}`);
 			return;
 		}
 	
@@ -1761,15 +1736,13 @@ class ScGraphItemView extends ItemView {
 		}
 
 		this.links.push({
-			source: sourceNode.id,
-			target: connectionId,
-			lastName: connectionId?.split('/')?.pop(),
+			source: sourceNode?.id?.split('/')?.pop(),
+			target: connectionId?.split('/')?.pop(),
 			value: connection.score || 0
 		});
 		this.connections.push({
-			source: sourceNode.id,
-			target: connectionId,
-			lastName: connectionId?.split('/')?.pop(),
+			source: sourceNode?.id?.split('/')?.pop(),
+			target: connectionId?.split('/')?.pop(),
 			score: connection.score || 0
 		});
 		this.updateScoreRange(connection.score);
