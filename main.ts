@@ -4,7 +4,7 @@ import _ from 'lodash';
 import { apiClient } from 'apiClient';
 import { SearchView } from 'view';
 import { lang } from 'lang';
-
+import { communityDetection } from 'community';
 const DEFAULT_NETWORK_SETTINGS : any = {
 	relevanceScoreThreshold: 0.5,
 	nodeSize: 4,
@@ -1543,6 +1543,7 @@ class ScGraphItemView extends ItemView {
 				title:`${l?.normalizedtitle}.md`,
 				key:`${l?.normalizedtitle}.md`,
 				fill: this.wikiFillColor,
+				text: l.extract,
 				id:`${l?.normalizedtitle}.md`,
 				type: 'wiki'
 			},
@@ -1690,6 +1691,9 @@ class ScGraphItemView extends ItemView {
 			return 0; // names are equal
 		});
 
+		//setting color for each community
+		this.nodes = communityDetection.detect(this.nodes, this.links, ['#FF0000'])
+
 		// console.log('Nodes after addFilteredConnections:', this.nodes);
 		// console.log('Links after addFilteredConnections:', this.links);	
 	}
@@ -1709,7 +1713,8 @@ class ScGraphItemView extends ItemView {
 				selected: false,
 				highlighted: false,
 				type: connection?.item?.type,
-				url: connection?.item?.url
+				url: connection?.item?.url,
+				text: connection?.item?.text
 			});
 		} else {
 			const nodes = this.nodes.filter((node: { id: string; }) => node.id === connectionId)
