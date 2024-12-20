@@ -1712,9 +1712,10 @@ class ScGraphItemView extends ItemView {
 				url: connection?.item?.url
 			});
 		} else {
-			const node = this.nodes.find((node: { id: string; }) => node.id === connectionId)
-			node.type = ''
-			node.fill = '#FF0000'
+			const nodes = this.nodes.filter((node: { id: string; }) => node.id === connectionId)
+			const allWiki = nodes.every(n => n.type === 'wiki');
+			nodes[0].type = allWiki ? 'wiki' : ''
+			nodes[0].fill = '#FF0000'
 			// console.log('Node already exists for connection ID:',connectionId);
 		}
 	}
