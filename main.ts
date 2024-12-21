@@ -497,7 +497,9 @@ class ScGraphItemView extends ItemView {
 	}
 
 	renderCommunityText() {
-		this.svgGroup.selectAll('.smart-connections-visualizer-text').remove();
+		if (this.centralNote.type === 'wiki'){
+			return;
+		}
 		const grouped = _.groupBy(this.nodes, 'stroke');
 
 		_.mapValues(grouped, group => {
@@ -509,7 +511,7 @@ class ScGraphItemView extends ItemView {
 			.attr("opacity", '50%')
 			.attr("x", group[0].x)
 			.attr("y", group[0].y)
-			.attr("font-size", "30px")
+			.attr("font-size", this.centralNode.type == 'wiki' ? '8px' : "30px")
 			.text(mcText?.word);
 		});
 	}
@@ -1626,10 +1628,14 @@ class ScGraphItemView extends ItemView {
 			this.addCentralNode();
 			this.addFilteredConnections(originalCentral.concat(wikiConnections));
 		}
-		this.nodes = communityDetection.detect(this.nodes, this.links)
+
+		if (this.centralNode.type !== 'wiki'){
+			this.nodes = communityDetection.detect(this.nodes, this.links)
+		}
+		this.svgGroup.selectAll('.smart-connections-visualizer-text').remove();
 		setTimeout(() => {
 			this.renderCommunityText();
-		}, 1000);
+		}, 2000);
 
 		
 		// Call the functions after all asynchronous operations are complete
@@ -1917,8 +1923,8 @@ class ScGraphItemView extends ItemView {
 		d.fx = null;
 		d.fy = null;
 		this.dragging = false
-		this.renderCommunityText();
-
+	
+		
 	}
 
 	async openSearch(node: any) {
