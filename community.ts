@@ -15,7 +15,7 @@ interface Edge {
 }
 
 // Function to detect communities in a graph
-function detect(nodes: Node[], edges: Edge[], keepOriginal: []): Array<Node & { fill: string }> {
+function detect(nodes: Node[], edges: Edge[]): Array<Node & { stroke: string }> {
     const graph = new Graph({multi:true});
     
     // Rename nodes while preserving their IDs
@@ -32,18 +32,15 @@ function detect(nodes: Node[], edges: Edge[], keepOriginal: []): Array<Node & { 
     louvain.assign(graph);
     
     // Set color to each community and return updated nodes
-    return setColorToCommunity(nodes, graph, keepOriginal);
+    return setColorToCommunity(nodes, graph);
 }
 
 // Function to set colors based on community detection
-function setColorToCommunity(nodes: Node[], graph: Graph, keepOriginal: []): Array<Node & { fill: string }> {
+function setColorToCommunity(nodes: Node[], graph: Graph): Array<Node & { stroke: string }> {
     return nodes.map(item => {
         const communityID = graph.getNodeAttribute(item.id, 'community');
         const color = uniqolor(communityID * 15).color;
-        if (keepOriginal?.includes(item?.fill)){
-            return item;
-        }
-        return { ...item, fill: color};
+        return { ...item, stroke: color};
     });
 }
 

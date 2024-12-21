@@ -4,6 +4,7 @@ import _ from 'lodash';
 import { apiClient } from 'apiClient';
 import { SearchView } from 'view';
 import { lang } from 'lang';
+import { nlp } from 'nlp';
 import { communityDetection } from 'community';
 const DEFAULT_NETWORK_SETTINGS : any = {
 	relevanceScoreThreshold: 0.5,
@@ -165,8 +166,8 @@ class ScGraphItemView extends ItemView {
 	updateNodeAppearance() {
 		this.nodeSelection.transition().duration(500)
 			.attr('fill', (d: any) => d.fill)
-			.attr('stroke', (d: any) => d.selected ? 'blanchedalmond' : (d.highlighted ? '#d46ebe' : 'transparent'))
-			.attr('stroke-width', (d: any) => d.selected ? 1.5 : (d.highlighted ? 0.3 : 0))
+			.attr('stroke', (d: any) => d.stroke)
+			.attr('stroke-width', (d: any) => d.selected ? 3 : 2)
 			.attr('opacity', (d: any) => this.getNodeOpacity(d));
 	}
 	
@@ -493,6 +494,24 @@ class ScGraphItemView extends ItemView {
 		// 	this.simulation.force('center', null); // Remove the center force after initial stabilization
 		// });
 
+	}
+
+	renderCommunityText() {
+		this.svgGroup.selectAll('.smart-connections-visualizer-text').remove();
+		const grouped = _.groupBy(this.nodes, 'stroke');
+
+		_.mapValues(grouped, group => {
+			const texts = group.map(item => item.text);
+			const mcText = nlp.getMostCommon(texts.join(' '), 'en')[0];
+			this.svgGroup.append("text")
+			.attr('class', 'smart-connections-visualizer-text')
+			.attr("fill", group[0].stroke)
+			.attr("opacity", '50%')
+			.attr("x", group[0].x)
+			.attr("y", group[0].y)
+			.attr("font-size", "30px")
+			.text(mcText?.word);
+		});
 	}
 
 
@@ -1607,6 +1626,11 @@ class ScGraphItemView extends ItemView {
 			this.addCentralNode();
 			this.addFilteredConnections(originalCentral.concat(wikiConnections));
 		}
+		this.nodes = communityDetection.detect(this.nodes, this.links)
+		setTimeout(() => {
+			this.renderCommunityText();
+		}, 1000);
+
 		
 		// Call the functions after all asynchronous operations are complete
 		const isValid = this.validateGraphData(this.nodes, this.links);
@@ -1692,9 +1716,8 @@ class ScGraphItemView extends ItemView {
 		});
 
 		//setting color for each community
-		this.nodes = communityDetection.detect(this.nodes, this.links, ['#FF0000'])
 
-		// console.log('Nodes after addFilteredConnections:', this.nodes);
+		console.log('Nodes after addFilteredConnections:', this.nodes);
 		// console.log('Links after addFilteredConnections:', this.links);	
 	}
 
@@ -1837,8 +1860,8 @@ class ScGraphItemView extends ItemView {
 			.attr('class', 'smart-connections-visualizer-node')
 			.attr('r', (d: any) => d.id === this.centralNode.id ? this.nodeSize + 2 : d.size)
 			.attr('fill', (d: any) => d.fill)
-			.attr('stroke', (d: any) => d.selected ? 'blanchedalmond' : 'transparent')
-			.attr('stroke-width', (d: any) => d.selected ? 1.5 : 0.3)
+			.attr('stroke', (d: any) => d.stroke)
+			.attr('stroke-width', (d: any) => d.selected ? 3 : 2)
 			.attr('opacity', 1)
 			.attr('cursor', 'pointer')
 			.call(d3.drag().on('start', this.onDragStart.bind(this))
@@ -1852,9 +1875,10 @@ class ScGraphItemView extends ItemView {
 	updateNode(update: any) {
 		return update.attr('r', (d: any) => d.id === this.centralNode.id ? this.nodeSize : this.nodeSize)
 			.attr('fill', (d: any) => d.selected ? '#f3ee5d' : d.fill)
-			.attr('stroke', (d: any) => d.selected ? 'blanchedalmond' : 'transparent')
-			.attr('stroke-width', (d: any) => d.selected ? 1.5 : 0.3);
+			.attr('stroke', (d: any) => d.stroke)
+			.attr('stroke-width', (d: any) => d.selected ? 3 : 2);
 	}
+	
 	onDragStart(event: any, d: any) {
 		if (!event.active) this.simulation.alphaTarget(0.3).restart();
 		this.dragging = true;
@@ -1893,7 +1917,7 @@ class ScGraphItemView extends ItemView {
 		d.fx = null;
 		d.fy = null;
 		this.dragging = false
-
+		this.renderCommunityText();
 
 	}
 
@@ -2020,7 +2044,8 @@ class ScGraphItemView extends ItemView {
 	enterLink(enter: any) {
 		return enter.append('line')
 			.attr('class', 'smart-connections-visualizer-link')
-			.attr('stroke', '#4c7787')
+			.attr('stroke', (d: any) => d.stroke)
+			// .attr('stroke-width', (d: any) => d.selected ? 3 : 2)
 			.attr('stroke-width', (d: any) => this.getLinkStrokeWidth(d))
 			.attr('stroke-opacity', 1)
 			.attr('opacity', 1);
