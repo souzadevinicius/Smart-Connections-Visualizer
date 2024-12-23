@@ -7,7 +7,7 @@ const lngDetector = new LanguageDetect();
  * @param text - The text to be analyzed.
  * @returns 'pt' for Portuguese, 'en' for English, or null if neither.
  */
-function detectLanguage(text: string): string | null {
+function detectLanguage(text: string, defaultLanguage: string): string | null {
     const result = lngDetector.detect(text, 1); // Get top 1 language prediction
 
     // Mapping of detected languages to their codes
@@ -18,7 +18,7 @@ function detectLanguage(text: string): string | null {
 
     if (result.length > 0) {
         const [language] = result[0]; // Get the most likely language
-        return languageMap[language] || 'en'; // Return mapped code or null if not found
+        return languageMap[language] || defaultLanguage; // Return mapped code or null if not found
     }
     return null; // Return null if no language is detected
 }

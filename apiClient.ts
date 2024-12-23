@@ -16,7 +16,7 @@ function __minimizeUrl(url: string) {
   return url?.replace(/\n\s*/g, "");
 }
 
-let restApiLang = 'en'
+let restApiLang = 'pt'
 
 function RestApiBase() {
   return `https://${restApiLang}.wikipedia.org/api/rest_v1`

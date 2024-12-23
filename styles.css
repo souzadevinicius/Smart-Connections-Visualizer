@@ -237,3 +237,22 @@ svg .smart-connections-visualizer-nodes circle {
     flex: 1;
     text-align: center;
 }
+
+
+.my-tooltip {
+    position: absolute;
+    background-color: lightblue;
+    border: 1px solid #ccc;
+    padding: 5px;
+    border-radius: 5px;
+    display: none; /* Initially hidden */
+    /* width: 30vw !important; 
+    height: 30vh !important; 
+    max-width: 30vw !important; 
+    max-height: 30vh !important;  */
+    left: 50%; /* Position from left */
+    top: 50%; /* Position from top */
+    transform: translate(-50%, -50%); /* Center it */
+    overflow: auto; 
+    z-index:10;
+}

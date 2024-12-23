@@ -1,21 +1,25 @@
 import { WordTokenizer } from 'natural';
 import { removeStopwords, eng, por } from 'stopword';
-import natural from 'natural';
 
 const langs = { 'en': eng, 'pt': por };
 
+const customStopWords = {'pt':['foi', 'pode'], 'en': []}
+
+const removeAccents = (str: string) => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 // Function to process the article and count word frequencies using stemming
 function getMostCommon(article: string, lang: string) {
+    const cleanArticle = removeAccents(article.toLowerCase());
     const tokenizer = new WordTokenizer();
-    const tokens = tokenizer.tokenize(article);
+    const tokens = tokenizer.tokenize(cleanArticle);
 
     // Remove stopwords and filter unique words while counting occurrences
     const stopwords = langs[lang] || langs['en'];
+    const ctmStopWords = customStopWords[lang] || customStopWords['en'];
+    const fullStopWords = stopwords.concat(ctmStopWords)
     const frequencyMap: Record<string, number> = {};
 
-    const cleanTokens = removeStopwords(tokens, stopwords).map((word: string) => {
-        return word.toLowerCase();
-    });
+    const cleanTokens = removeStopwords(tokens, fullStopWords)
 
     cleanTokens.forEach((word: string) => {
         frequencyMap[word] = (frequencyMap[word] || 0) + 1;

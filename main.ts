@@ -69,6 +69,7 @@ class ScGraphItemView extends ItemView {
 
 	private plugin: ScGraphView;
 
+	tooltip: HTMLElement;
 	currentNoteKey: string;
 	noteConnections: any; 
 	centralNote: any;
@@ -127,7 +128,6 @@ class ScGraphItemView extends ItemView {
 		this.currentNoteKey = '';
 		this.isHovering = false;
 		this.plugin = plugin;
-
 		// Set the initial values from the loaded settings
         this.relevanceScoreThreshold = this.plugin.settings.relevanceScoreThreshold;
         this.nodeSize = this.plugin.settings.nodeSize;
@@ -422,25 +422,33 @@ class ScGraphItemView extends ItemView {
 					this.updateLabelOpacity(event.transform.k);
 				}));
 				
-		// Define the arrowhead marker
-		svg.append('defs').append('marker')
-		.attr('id', 'arrowhead')
-		.attr('orient', 'auto')
-		.attr('markerWidth', 10)
-		.attr('markerHeight', 10)
-		.attr('refX', 5)
-		.attr('refY', 2.5)
-		.append('polygon')
-		.attr('points', '0,0 10,5 0,10')
-		.attr('fill', '#999');
-	
+
+		this.tooltip = document.createElement('div');
+		this.tooltip.setAttribute('class', 'my-tooltip');
+        this.tooltip.addEventListener('mouseout', () => {
+            this.tooltip.style.display = 'none'; // Hide the tooltip
+        });
+		document.body.appendChild(this.tooltip);
+
 		const svgGroup = svg.append('g');
 
 		svgGroup.append('g').attr('class', 'smart-connections-visualizer-links');
 		svgGroup.append('g').attr('class', 'smart-connections-visualizer-node-labels');
 		svgGroup.append('g').attr('class', 'smart-connections-visualizer-link-labels');
 		svgGroup.append('g').attr('class', 'smart-connections-visualizer-nodes');
-	
+		
+		svgGroup.append("defs").append("marker")
+		.attr("id", "arrow")
+		.attr("viewBox", "0 -5 10 10")
+		.attr("refX", 30) // Adjust this value as needed
+		.attr("refY", 0)
+		.attr("markerWidth", 6)
+		.attr("markerHeight", 6)
+		.attr("orient", "auto")
+		.append("path")
+		.attr("d", "M0,-5L10,0L0,5")
+		.attr("fill", "#000000"); // Color of the arrow
+
 		this.svgGroup = svgGroup;
 		this.svg = svg;
 	}
@@ -497,21 +505,25 @@ class ScGraphItemView extends ItemView {
 	}
 
 	renderCommunityText() {
+		this.svgGroup.selectAll('.smart-connections-visualizer-text').remove();
 		if (this.centralNote.type === 'wiki'){
 			return;
 		}
+
 		const grouped = _.groupBy(this.nodes, 'stroke');
 
 		_.mapValues(grouped, group => {
-			const texts = group.map(item => item.text);
-			const mcText = nlp.getMostCommon(texts.join(' '), 'en')[0];
+			const texts = group.map(item => item.text).filter(t => t);
+			console.log(texts)
+			const mcText = nlp.getMostCommon(texts.join(' '), this.plugin.settings.language)[0];
 			this.svgGroup.append("text")
 			.attr('class', 'smart-connections-visualizer-text')
 			.attr("fill", group[0].stroke)
 			.attr("opacity", '50%')
 			.attr("x", group[0].x)
 			.attr("y", group[0].y)
-			.attr("font-size", this.centralNode.type == 'wiki' ? '8px' : "30px")
+			.attr("font-size", "30px")
+			.attr("z-index", "30px")
 			.text(mcText?.word);
 		});
 	}
@@ -769,9 +781,9 @@ class ScGraphItemView extends ItemView {
             .setName('Select Language')
             .setDesc('Choose your preferred language')
             .addDropdown(dropDown => {
-                dropDown.addOption('en', 'English');     // Option for English
                 dropDown.addOption('pt', 'Portuguese'); // Option for Portuguese
-                dropDown.setValue(this.plugin.settings.language); // Set the current value
+                dropDown.addOption('en', 'English');     // Option for English
+                dropDown.setValue('pt'); // Set the current value
 
                 dropDown.onChange(async (value) => {
                     this.plugin.settings.language = value; // Update the setting with selected value
@@ -1540,13 +1552,13 @@ class ScGraphItemView extends ItemView {
 		if (!node) return
 		const title = node?.item?.name || node;
 		let titleName = title?.split('/')?.pop()?.replace('.md', '');
-		let titleLang = lang.detectLanguage(titleName);
-		apiClient.setLang(titleLang);
+		// let titleLang = lang.detectLanguage(titleName, this.plugin.settings.language);
+		// apiClient.setLang(titleLang);
 		let res = await apiClient.getResponse(titleName).then(content => content).catch(e => console.info(e));
 		if (!res){
 			const aliases = this.getAliases(title);
 			for (const alias of aliases) {
-				let titleLang = lang.detectLanguage(alias)
+				let titleLang = lang.detectLanguage(alias, this.plugin.settings.language)
 				apiClient.setLang(titleLang);
 				res = await apiClient.getResponse(alias).then(content => content).catch(e => console.info(e));
 				if (res !== null) {
@@ -1565,6 +1577,7 @@ class ScGraphItemView extends ItemView {
 				key:`${l?.normalizedtitle}.md`,
 				fill: this.wikiFillColor,
 				text: l.extract,
+				thumbnail: l?.thumbnail,
 				id:`${l?.normalizedtitle}.md`,
 				type: 'wiki'
 			},
@@ -1574,6 +1587,7 @@ class ScGraphItemView extends ItemView {
 	}
 	
 	async updateConnections(nodeName?: string) {
+		this.svgGroup.selectAll('.smart-connections-visualizer-text').remove();
 		this.nodes = [];
 		this.links = [];
 		this.connections = [];
@@ -1628,11 +1642,8 @@ class ScGraphItemView extends ItemView {
 			this.addCentralNode();
 			this.addFilteredConnections(originalCentral.concat(wikiConnections));
 		}
+		this.nodes = communityDetection.detect(this.nodes, this.links)
 
-		if (this.centralNode.type !== 'wiki'){
-			this.nodes = communityDetection.detect(this.nodes, this.links)
-		}
-		this.svgGroup.selectAll('.smart-connections-visualizer-text').remove();
 		setTimeout(() => {
 			this.renderCommunityText();
 		}, 2000);
@@ -1704,26 +1715,7 @@ class ScGraphItemView extends ItemView {
 				console.warn(`Skipping invalid connection at index ${index}:`, connection);
 			}
 		});
-		this.nodes = this.nodes.sort((a, b) => {
-			const nameA = a.id.toUpperCase(); // ignore case
-			const nameB = b.id.toUpperCase(); // ignore case
-			if (nameA < nameB) return -1;
-			if (nameA > nameB) return 1;
-			return 0; // names are equal
-		});
-		
-
-		this.links = this.links.sort((a, b) => {
-			const nameA = a.target?.split('/')?.pop().toUpperCase(); // ignore case
-			const nameB = b.target?.split('/')?.pop().toUpperCase(); // ignore case
-			if (nameA < nameB) return -1;
-			if (nameA > nameB) return 1;
-			return 0; // names are equal
-		});
-
-		//setting color for each community
-
-		console.log('Nodes after addFilteredConnections:', this.nodes);
+		// console.log('Nodes after addFilteredConnections:', this.nodes);
 		// console.log('Links after addFilteredConnections:', this.links);	
 	}
 
@@ -1743,7 +1735,8 @@ class ScGraphItemView extends ItemView {
 				highlighted: false,
 				type: connection?.item?.type,
 				url: connection?.item?.url,
-				text: connection?.item?.text
+				text: connection?.item?.text,
+				thumbnail: connection?.item?.thumbnail
 			});
 		} else {
 			const nodes = this.nodes.filter((node: { id: string; }) => node.id === connectionId)
@@ -1820,7 +1813,6 @@ class ScGraphItemView extends ItemView {
 		 // Update links first
 		 this.linkSelection = svgGroup.select('g.smart-connections-visualizer-links').selectAll('line')
 		 .data(this.validatedLinks, (d: any) => `${d.source}-${d.target}`)
-		 .attr('marker-end', 'url(#arrowhead)')
 		 .join(
 			 enter => this.enterLink(enter),
 			 update => this.updateLink(update),
@@ -1923,8 +1915,7 @@ class ScGraphItemView extends ItemView {
 		d.fx = null;
 		d.fy = null;
 		this.dragging = false
-	
-		
+		this.renderCommunityText();
 	}
 
 	async openSearch(node: any) {
@@ -1989,12 +1980,26 @@ class ScGraphItemView extends ItemView {
 
 		// Dont trigger possible highlights if user dragging around nodes quickly for fun
 		if(this.dragging) return;
-					
 		// Don't apply hover affect to center node
 		if(d.id === this.centralNode.id) return;
-
+		
+		
+		
 		// Hovering state active
 		this.isHovering = true;
+		const renderImage = (d) => {
+			return `
+				${d?.thumbnail ? `<img src="${d.thumbnail.source}" width="${d.thumbnail.width}" height="${d.thumbnail.height}"/>` : ''}
+			`;
+		};
+		if (d.text && this.isHovering){
+			setTimeout(() => {
+				this.tooltip.style.display = 'block';
+				// this.tooltip.style.left = `${event.pageX + 10}px`;
+				// this.tooltip.style.top = `${event.pageY + 10}px`;
+				this.tooltip.innerHTML = `<h3>${d.name}</h3><br/>${renderImage(d)}<div>${d.text}</div>`;
+			}, 1000);
+		}
 
 		// Highlight node
 		this.highlightNode(d);
@@ -2022,6 +2027,7 @@ class ScGraphItemView extends ItemView {
 		this.centerHighlighted = false;
 		this.unhighlightNode(d);
 
+
 		// Hide link labels associated with the node
 		this.updateLinkLabelAppearance({ id: null });
 	
@@ -2038,7 +2044,6 @@ class ScGraphItemView extends ItemView {
 	updateLinkSelection(svgGroup: any) {
 		return svgGroup.select('g.links').selectAll('line')
 			.data(this.validatedLinks, (d: any) => `${d.source}-${d.target}`)
-			.attr('marker-end', 'url(#arrowhead)') // Attach the arrowhead
 			.style('cursor', 'pointer')
 			.join(
 				(enter: any) => this.enterLink(enter),
@@ -2051,9 +2056,9 @@ class ScGraphItemView extends ItemView {
 		return enter.append('line')
 			.attr('class', 'smart-connections-visualizer-link')
 			.attr('stroke', (d: any) => d.stroke)
-			// .attr('stroke-width', (d: any) => d.selected ? 3 : 2)
 			.attr('stroke-width', (d: any) => this.getLinkStrokeWidth(d))
 			.attr('stroke-opacity', 1)
+			.attr("marker-end", "url(#arrow)")   
 			.attr('opacity', 1);
 	}
 
@@ -2073,7 +2078,6 @@ class ScGraphItemView extends ItemView {
 			.attr('class', 'smart-connections-visualizer-link-labels')
 			.selectAll('text')
 			.data(this.validatedLinks, (d: any) => `${d.source.id}-${d.target.id}`)
-			.attr('marker-end', 'url(#arrowhead)')
 			.join(
 				(enter: any) => this.enterLinkLabel(enter),
 				(update: any) => this.updateLinkLabel(update),
