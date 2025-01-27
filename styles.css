@@ -241,8 +241,9 @@ svg .smart-connections-visualizer-nodes circle {
 
 .my-tooltip {
     position: absolute;
-    background-color: lightblue;
+    /* background-color: lightblue; */
     border: 1px solid #ccc;
+    color: black;
     padding: 5px;
     border-radius: 5px;
     display: none; /* Initially hidden */

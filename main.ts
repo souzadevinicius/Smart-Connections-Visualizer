@@ -76,6 +76,7 @@ class ScGraphItemView extends ItemView {
 	centralNode: any;
 	connectionType = 'block';
     isHovering: boolean; 
+	searchText: string;
 	relevanceScoreThreshold = 0.5;
 	nodeSize = 4;
 	linkThickness = 0.3;
@@ -128,6 +129,7 @@ class ScGraphItemView extends ItemView {
 		this.currentNoteKey = '';
 		this.isHovering = false;
 		this.plugin = plugin;
+		this.searchText = '';
 		// Set the initial values from the loaded settings
         this.relevanceScoreThreshold = this.plugin.settings.relevanceScoreThreshold;
         this.nodeSize = this.plugin.settings.nodeSize;
@@ -179,6 +181,7 @@ class ScGraphItemView extends ItemView {
 	// }
 
 	getNodeOpacity(d: any) {
+		if (this?.searchText.trim() != '') return d.id.toLowerCase().indexOf(this.searchText) > -1 ? 1 : .1;
 		if (d.id === this.centralNode.id) return 1;
 		if (d.selected) return 1;
 		if (d.highlighted) return 0.8;
@@ -242,7 +245,8 @@ class ScGraphItemView extends ItemView {
 
 	updateLabelAppearance(node: any) {
 		this.labelSelection.transition().duration(500)
-			.attr('opacity', (d: any) => this.getLabelOpacity(d, node))
+			.attr('opacity', (d: any) => this.getNodeOpacity(d))
+			// .attr('opacity', (d: any) => this.getLabelOpacity(d, node))
 			.text((d: any) =>  d.id === this.highlightedNodeId ? this.formatLabel(d.name, false) : this.formatLabel(d.name, true));
 	}
 	
@@ -280,11 +284,11 @@ class ScGraphItemView extends ItemView {
 	
 
 	resetLinkAppearance() {
-		this.linkSelection.transition().duration(500).attr('opacity', 1);
+		this.linkSelection.transition().duration(500).attr('opacity', (d: any) => this.getNodeOpacity(d));
 	}
 
 	resetLabelAppearance() {
-		this.labelSelection.transition().duration(500).attr('opacity', 1)
+		this.labelSelection.transition().duration(500).attr('opacity', (d: any) => this.getNodeOpacity(d))
 			.text((d: any) => this.formatLabel(d.name, true));
 	}
 
@@ -514,7 +518,6 @@ class ScGraphItemView extends ItemView {
 
 		_.mapValues(grouped, group => {
 			const texts = group.map(item => item.text).filter(t => t);
-			console.log(texts)
 			const mcText = nlp.getMostCommon(texts.join(' '), this.plugin.settings.language)[0];
 			this.svgGroup.append("text")
 			.attr('class', 'smart-connections-visualizer-text')
@@ -729,6 +732,7 @@ class ScGraphItemView extends ItemView {
 
         // Create new settings icon and dropdown menu
         this.createSettingsIcon();
+		this.createSearchInput();
         this.createDropdownMenu();
         this.setupAccordionHeaders();
         this.setupSettingsEventListeners();
@@ -939,6 +943,29 @@ class ScGraphItemView extends ItemView {
 	
 		svg.appendChild(path);
 		return svg;
+	}
+
+	createSearchInput() {
+		// Create a container for the input
+		// Create an input element
+		const inputElement = this.contentEl.createEl('input');
+		inputElement.type = 'text';
+		inputElement.placeholder = 'Type something...';
+		this.contentEl.appendChild(inputElement);
+
+		// Add an event listener for when the input value changes
+
+		const debouncedUpdate = debounce(async(event: Event) => {
+			this.handleInputChange(event.target.value);
+			if (event.target.value.trim() == ""){
+				this.unhighlightNode(null);
+				return
+			}
+			const nodesToHighlight = this.nodes.filter(n => n.id.toLowerCase().indexOf(event.target.value) > -1)
+			nodesToHighlight.forEach(n => this.highlightNode(n))
+			
+		}, 1000, true);			
+		inputElement.addEventListener('input', debouncedUpdate);
 	}
 
 	createSettingsIcon() {
@@ -1642,11 +1669,15 @@ class ScGraphItemView extends ItemView {
 			this.addCentralNode();
 			this.addFilteredConnections(originalCentral.concat(wikiConnections));
 		}
-		this.nodes = communityDetection.detect(this.nodes, this.links)
-
-		setTimeout(() => {
-			this.renderCommunityText();
-		}, 2000);
+		try {
+			this.nodes = communityDetection.detect(this.nodes, this.links)
+	
+			setTimeout(() => {
+				this.renderCommunityText();
+			}, 2000);
+		} catch (error) {
+			// console.error(error);
+		}
 
 		
 		// Call the functions after all asynchronous operations are complete
@@ -1741,9 +1772,10 @@ class ScGraphItemView extends ItemView {
 		} else {
 			const nodes = this.nodes.filter((node: { id: string; }) => node.id === connectionId)
 			const allWiki = nodes.every(n => n.type === 'wiki');
-			nodes[0].type = allWiki ? 'wiki' : ''
-			nodes[0].fill = '#FF0000'
-			// console.log('Node already exists for connection ID:',connectionId);
+			if (nodes[0]){
+				nodes[0].type = allWiki ? 'wiki' : ''
+				nodes[0].fill = '#FF0000'
+			}
 		}
 	}
 	
@@ -2197,7 +2229,7 @@ class ScGraphItemView extends ItemView {
 		
 		// Update node labels opacity based on zoom level
 		if(this.labelSelection) {
-			this.labelSelection.transition().duration(300).attr('opacity', newOpacity);
+			this.labelSelection.transition().duration(300).attr('opacity', (d: any) => this.getNodeOpacity(d));
 		}
 	}	
 	
@@ -2288,6 +2320,10 @@ class ScGraphItemView extends ItemView {
 		this.isDragging = false;
 		this.selectionBox.remove();
 	}
+
+	handleInputChange(value: string) {
+		this.searchText = value?.toLowerCase();
+    }
 
 	
 
